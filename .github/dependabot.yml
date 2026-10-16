@@ -1,0 +1,32 @@
+# Dependabot configuration for the newbie starter template.
+#
+# This repo is the single source of truth for the newbie basic template
+# (see ADR-003 in worldzhy/newbie). Dependabot watches npm dependencies
+# and GitHub Actions used by the template so generated apps start from a
+# current, CVE-clean skeleton.
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 10
+    versioning-strategy: increase
+    labels:
+      - "dependencies"
+    # Group patch-level bumps to reduce PR noise; minor/major stay separate
+    # so breaking changes get individual review.
+    groups:
+      patch-updates:
+        update-types:
+          - "patch"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    labels:
+      - "ci"
