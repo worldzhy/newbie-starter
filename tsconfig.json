@@ -17,13 +17,12 @@
     "forceConsistentCasingInFileNames": false,
     "noFallthroughCasesInSwitch": false,
     "outDir": "./dist",
-    "baseUrl": "./",
     "tsBuildInfoFile": "dist/.tsbuildinfo",
     "paths": {
-      "@generated/*": ["generated/*"],
-      "@modules/*": ["src/modules/*"],
-      "@devbie/newbie/*": ["node_modules/@devbie/newbie/dist/*"],
-      "@/*": ["src/*"]
+      "@generated/*": ["./generated/*"],
+      "@modules/*": ["./src/modules/*"],
+      "@devbie/newbie/*": ["./node_modules/@devbie/newbie/dist/*"],
+      "@/*": ["./src/*"]
     }
   }
 }
