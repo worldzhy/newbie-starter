@@ -1,0 +1,43 @@
+# Build gate for the newbie starter template.
+#
+# This repo IS the template (ADR-003 in worldzhy/newbie) — nightwatch's GitHub
+# generate flow clones it as-is. A green build here is the only guarantee that
+# generated apps start from a working skeleton, so every push and PR must
+# produce a clean `nest build`.
+name: ci
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # Lockfile is tracked, so npm ci gives a reproducible install that
+      # matches what the maintainer validated locally.
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      # prisma.config eagerly resolves PRISMA_DATABASE_URL even for generate;
+      # use a non-connecting placeholder — generate never opens a connection.
+      - name: Prisma generate
+        run: npx prisma generate
+        env:
+          PRISMA_DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+
+      - name: Build
+        run: npm run build
