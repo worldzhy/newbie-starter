@@ -4,7 +4,7 @@
 # generate flow clones it as-is. A green build here is the only guarantee that
 # generated apps start from a working skeleton, so every push and PR must
 # produce a clean `nest build`.
-name: ci
+name: CI
 
 on:
   push:
