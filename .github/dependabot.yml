@@ -8,6 +8,7 @@ version: 2
 updates:
   - package-ecosystem: "npm"
     directory: "/"
+    target-branch: "dev"
     schedule:
       interval: "weekly"
       day: "monday"
@@ -33,16 +34,22 @@ updates:
       typescript-eslint:
         patterns:
           - "@typescript-eslint/*"
-    # typescript-eslint does not support TypeScript 7 yet
-    # (https://github.com/typescript-eslint/typescript-eslint/issues/10940).
-    # Revisit once upstream ships TS 7 support.
+    # Policy: no major upgrades by default. Majors are milestone-driven
+    # (CVE / feature need / ecosystem EOL) and executed as verified
+    # milestones on dev, never via automated PRs — CI cannot observe
+    # behavior-level regressions (changed defaults, family lockstep,
+    # cross-repo consumer impact), so a green check is not evidence.
+    # Dependabot groups only aggregate patch/minor anyway, so majors
+    # arrive as single-package PRs that break lockstep and occupy the
+    # open-PR limit, crowding out minor/patch updates.
     ignore:
-      - dependency-name: "typescript"
+      - dependency-name: "*"
         update-types:
           - "version-update:semver-major"
 
   - package-ecosystem: "github-actions"
     directory: "/"
+    target-branch: "dev"
     schedule:
       interval: "monthly"
     labels:
