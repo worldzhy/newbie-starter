@@ -1,0 +1,43 @@
+# Caddy configuration template for the production stack.
+#
+# Placeholders __SITE_DOMAIN__ and __ACME_EMAIL__ are substituted by
+# scripts/render-env.sh (values come from Secrets Manager). The rendered file
+# is mounted read-only into the caddy container as /etc/caddy/Caddyfile.
+#
+# ROUTING CONSTRAINT — keep in sync with backend route layout (ADR-012):
+# The web-monitor module exposes controllers natively under /web-monitor/* (the
+# browser SDK reports to https://<domain>/web-monitor/report and the backend
+# @PublicCors registry matches the exact route). Those paths must be proxied
+# WITHOUT stripping /api. All other /api/* paths are backend controllers
+# without a global prefix, so /api is stripped there — this mirrors the
+# Next.js dev rewrite /api/:path* -> 127.0.0.1:3000/:path*.
+# Any new backend-native /api/<segment> route requires a new exception above
+# the stripping block.
+
+{
+	email __ACME_EMAIL__
+}
+
+__SITE_DOMAIN__ {
+	encode zstd gzip
+
+	handle /healthz {
+		respond "ok" 200
+	}
+
+	# Backend-native /web-monitor routes: forward unchanged (browser SDK ingestion).
+	handle /web-monitor/* {
+		reverse_proxy backend:3000
+	}
+
+	# Remaining backend API: strip the /api prefix.
+	handle /api/* {
+		uri strip_prefix /api
+		reverse_proxy backend:3000
+	}
+
+	# Everything else is the Next.js frontend.
+	handle {
+		reverse_proxy frontend:3001
+	}
+}

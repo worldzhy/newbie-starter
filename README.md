@@ -34,7 +34,7 @@ npx newbie doctor           # audit wiring / drift / env
 
 ## Updating the skeleton
 
-The framework-managed skeleton files (`src/main.ts`, `tsconfig*.json`, `nest-cli.json`, `prisma.config.ts`, and the `@@newbie-framework-start/end` block inside `prisma/schema.prisma`) evolve with the template. To pull updates:
+The framework-managed skeleton files (`src/main.ts`, `tsconfig*.json`, `nest-cli.json`, `prisma.config.ts`, the `@@newbie-framework-start/end` block inside `prisma/schema.prisma`, and the framework deploy assets under `deploy/`) evolve with the template. To pull updates:
 
 ```bash
 npx newbie update-template            # review a diff against the latest template
@@ -42,6 +42,14 @@ npx newbie update-template --write    # apply it (then commit on a branch and op
 ```
 
 Business code — `src/application/`, `src/modules/`, your Prisma models outside the marker block, `.env` — is never touched.
+
+## Production deploy assets (`deploy/`)
+
+`deploy/` ships a reference single-host production stack (Docker Compose behind Caddy, S3 backups, CloudWatch metrics). Files fall into three ownership classes:
+
+- **Framework-synced** — `scripts/*.sh`, `compose.prod.yml`, `Caddyfile.tmpl`: owned by this template and kept byte-identical in consuming projects via `newbie update-template`; never edit them downstream.
+- **Scaffold defaults** — `clickhouse/config.d/memory.xml`: copied by `create` but never synced; tune per host.
+- **Not in the template** — `env.template` (secret manifest), `aws/stack.yml` (CloudFormation), and the two host config JSONs (`deploy.config.json` / `env.config.json`; schema in `scripts/lib.sh`) are host-owned and live outside the template.
 
 ## Built-in monitoring (optional, env-gated)
 
