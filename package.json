@@ -7,13 +7,14 @@
   "license": "MIT",
   "scripts": {
     "build": "nest build",
-    "format": "prettier --write \"src/**/*.ts\"",
-    "start": "nest start",
-    "start:dev": "nest start --watch",
-    "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/src/main.js",
-    "newbie": "newbie",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "lint": "eslint \"{src}/**/*.ts\" --fix",
+    "newbie": "newbie",
+    "start": "nest start",
+    "start:debug": "nest start --debug --watch",
+    "start:dev": "nest start --watch",
+    "start:prod": "node dist/src/main.js",
     "test": "find src -name '*.test.ts' -print0 | xargs -0 -r node --import tsx --test"
   },
   "dependencies": {
