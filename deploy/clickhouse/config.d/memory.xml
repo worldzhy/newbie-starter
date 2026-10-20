@@ -1,0 +1,6 @@
+<clickhouse>
+    <!-- Shared-host deployment: the default max_server_memory_usage is ~90%
+         of total RAM, which assumes a dedicated host. Cap it so Postgres,
+         Mongo, Redis and the Node apps keep headroom (ADR-015). -->
+    <max_server_memory_usage>4294967296</max_server_memory_usage>
+</clickhouse>
