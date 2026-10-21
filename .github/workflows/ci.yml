@@ -1,6 +1,6 @@
 # Build gate for the newbie starter template.
 #
-# This repo IS the template (ADR-003 in worldzhy/newbie) — nightwatch's GitHub
+# This repo IS the template (ADR-003 in worldzhy/devbie) — nightwatch's GitHub
 # generate flow clones it as-is. A green build here is the only guarantee that
 # generated apps start from a working skeleton, so every push and PR must
 # produce a clean `nest build`.
