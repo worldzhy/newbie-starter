@@ -35,6 +35,12 @@ jobs:
       - name: Format check
         run: npm run format:check
 
+      # ADR-009 D4: every file this template ships must be classified in the
+      # newbie CLI ownership registry (unlisted = error), and the template must
+      # match its own registry version.
+      - name: Template ownership registry
+        run: npm run check:template
+
       - name: Lint
         run: npm run lint
 
