@@ -35,22 +35,7 @@ if ! docker pull "$BACKEND_IMAGE"; then
 fi
 
 # Extract the deploy/ payload (compose layers, Caddy template, scripts).
-CID="$(docker create "$BACKEND_IMAGE" true)"
-trap 'docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
-rm -rf "${INSTALL_DIR}/.deploy-new"
-mkdir -p "${INSTALL_DIR}/.deploy-new"
-docker cp "${CID}:/deploy/." "${INSTALL_DIR}/.deploy-new/"
-cp "${INSTALL_DIR}/.deploy-new/compose.framework.yml" "${INSTALL_DIR}/compose.framework.yml"
-cp "${INSTALL_DIR}/.deploy-new/compose.modules.yml" "${INSTALL_DIR}/compose.modules.yml"
-# Host-owned overlay: seed once, never overwritten (ADR-008 D1).
-if [ ! -f "${INSTALL_DIR}/compose.application.yml" ]; then
-  cp "${INSTALL_DIR}/.deploy-new/compose.application.yml" "${INSTALL_DIR}/compose.application.yml"
-fi
-cp "${INSTALL_DIR}/.deploy-new/Caddyfile.tmpl" "${INSTALL_DIR}/Caddyfile.tmpl"
-rm -rf "${INSTALL_DIR}/scripts"
-cp -R "${INSTALL_DIR}/.deploy-new/scripts" "${INSTALL_DIR}/scripts"
-chmod 0755 "${INSTALL_DIR}/scripts/"*.sh
-rm -rf "${INSTALL_DIR}/.deploy-new"
+extract_deploy_assets "$BACKEND_IMAGE" "$INSTALL_DIR"
 
 # Render .env + Caddyfile from Secrets Manager.
 "${INSTALL_DIR}/scripts/render-env.sh"

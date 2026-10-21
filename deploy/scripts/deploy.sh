@@ -26,27 +26,11 @@ aws ecr get-login-password --region "$REGION" \
 
 BACKEND_IMAGE="${REGISTRY}/${APP_NAME}-backend:${IMAGE_TAG}"
 
-# Extract deploy/ assets (compose file, Caddy template, scripts) from the
+# Extract deploy/ assets (compose layers, Caddy template, scripts) from the
 # backend image before recreating anything. The image is the single source
 # of truth; the host never clones the repository.
 $COMPOSE pull backend >/dev/null
-CID="$(docker create "$BACKEND_IMAGE" true)"
-trap 'docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
-# cp to a temp dir first so a failed extraction never leaves partial files.
-rm -rf "${INSTALL_DIR}/.deploy-new"
-mkdir -p "${INSTALL_DIR}/.deploy-new"
-docker cp "${CID}:/deploy/." "${INSTALL_DIR}/.deploy-new/"
-cp "${INSTALL_DIR}/.deploy-new/compose.framework.yml" "${INSTALL_DIR}/compose.framework.yml"
-cp "${INSTALL_DIR}/.deploy-new/compose.modules.yml" "${INSTALL_DIR}/compose.modules.yml"
-# Host-owned overlay: seed once, never overwritten (ADR-008 D1).
-if [ ! -f "${INSTALL_DIR}/compose.application.yml" ]; then
-  cp "${INSTALL_DIR}/.deploy-new/compose.application.yml" "${INSTALL_DIR}/compose.application.yml"
-fi
-cp "${INSTALL_DIR}/.deploy-new/Caddyfile.tmpl" "${INSTALL_DIR}/Caddyfile.tmpl"
-rm -rf "${INSTALL_DIR}/scripts"
-cp -R "${INSTALL_DIR}/.deploy-new/scripts" "${INSTALL_DIR}/scripts"
-chmod 0755 "${INSTALL_DIR}/scripts/"*.sh
-rm -rf "${INSTALL_DIR}/.deploy-new"
+extract_deploy_assets "$BACKEND_IMAGE" "$INSTALL_DIR"
 
 # Re-render in case the new image changed the Caddy template.
 "${INSTALL_DIR}/scripts/render-env.sh"
