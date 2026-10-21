@@ -35,6 +35,9 @@ jobs:
       - name: Format check
         run: npm run format:check
 
+      - name: Lint
+        run: npm run lint
+
       # prisma.config eagerly resolves PRISMA_DATABASE_URL even for generate;
       # use a non-connecting placeholder — generate never opens a connection.
       - name: Prisma generate
