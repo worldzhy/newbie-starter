@@ -42,7 +42,7 @@
   },
   "devDependencies": {
     "@devbie/newbie-cli": "*",
-    "@devbie/style-guide": "^1.3.1",
+    "@devbie/style-guide": "^1.4.1",
     "@nestjs/cli": "^12.0.8",
     "@nestjs/schematics": "^12.0.7",
     "@types/cookie-parser": "^1.4.7",
