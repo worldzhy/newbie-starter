@@ -1,3 +1,6 @@
+# Framework-managed block (ADR-009): `newbie update-template` rewrites it in
+# place. Project-specific ignores belong outside the markers.
+# @@newbie-framework-start
 # compiled output
 /dist
 /generated
@@ -6,9 +9,6 @@
 
 # dotenv environment variables file
 .env
-
-# git submodules file
-.gitmodules
 
 # OS
 .DS_Store
@@ -22,6 +22,7 @@
 
 # IDE - WebStorm
 .idea
+# @@newbie-framework-end
 
-# newbie CLI state
-.newbie
+# git submodules file
+.gitmodules
