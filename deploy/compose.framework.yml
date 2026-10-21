@@ -1,0 +1,143 @@
+# Production stack for the app — framework layer (ADR-008 D1).
+#
+# This file owns only the framework services: postgres (+ its migrator),
+# backend, caddy and the optional frontend. Module-derived services live in
+# compose.modules.yml (rendered by `newbie assemble` — do not hand-edit), and
+# host-private services/overrides live in compose.application.yml (host-owned,
+# never touched by tooling). Scripts always run docker compose with the three
+# -f flags in that order; compose merges depends_on across files, so the
+# module layer can attach to backend while this layer never references
+# anything above it.
+#
+# Runs on a single EC2 host behind Caddy. Only Caddy publishes host ports
+# (80/443); every other service is reachable only on the internal "nwb"
+# network. Variables are interpolated from .env in this directory, rendered
+# by scripts/render-env.sh: app keys come from the Secrets Manager secret
+# (env.config.json), deployment plumbing (ECR_REPOSITORY_PREFIX / IMAGE_TAG /
+# AWS_REGION) comes from deploy.config.json (ADR-006 C1). Data directories
+# use paths relative to this file's directory — no host literals here.
+#
+# UI-less hosts: the frontend is gated behind the "ui" profile and caddy's
+# depends_on marks it `required: false` (compose >= 2.24), so the merged
+# model stays valid when the profile is off.
+#
+# Routing contract (see ADR-012):
+#   /healthz        -> Caddy responds directly
+#   /<module-key>/* -> backend as-is, one block per module declaring
+#                      publicNamespace (rendered into Caddyfile.tmpl by
+#                      `newbie assemble`; e.g. web-monitor SDK reports)
+#   /api/*          -> backend with /api stripped (mirrors the dev rewrite)
+#   everything else -> frontend
+
+name: ${APP_NAME}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    networks:
+      - nwb
+    labels:
+      # backup.sh discovers backup engines from this label (ADR-008 D5).
+      newbie.backup-engine: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres-migrate:
+    image: ${ECR_REPOSITORY_PREFIX}/${APP_NAME}-backend:${IMAGE_TAG}
+    restart: "no"
+    env_file:
+      - ./.env
+    command: ["npx", "prisma", "migrate", "deploy"]
+    networks:
+      - nwb
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend:
+    image: ${ECR_REPOSITORY_PREFIX}/${APP_NAME}-backend:${IMAGE_TAG}
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    expose:
+      - "3000"
+    networks:
+      - nwb
+    stop_grace_period: 30s
+    healthcheck:
+      test:
+        - "CMD"
+        - "node"
+        - "-e"
+        - "require('http').get('http://127.0.0.1:3000/',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    # Module-derived depends_on entries (datastore health, <key>-migrate
+    # completion) merge in from compose.modules.yml at runtime.
+    depends_on:
+      postgres-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    image: ${ECR_REPOSITORY_PREFIX}/${APP_NAME}-frontend:${IMAGE_TAG}
+    restart: unless-stopped
+    # UI-less hosts run without the "ui" profile; see the header comment.
+    profiles: ["ui"]
+    environment:
+      - PORT=3001
+      - HOSTNAME=0.0.0.0
+    expose:
+      - "3001"
+    networks:
+      - nwb
+    healthcheck:
+      test:
+        - "CMD"
+        - "node"
+        - "-e"
+        - "require('http').get('http://127.0.0.1:3001/',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - nwb
+    # required: false keeps the merged model valid when the "ui" profile is
+    # off and the frontend service is absent (compose >= 2.24, ADR-008 D1).
+    depends_on:
+      backend:
+        condition: service_started
+      frontend:
+        condition: service_started
+        required: false
+
+networks:
+  nwb:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:

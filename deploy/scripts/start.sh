@@ -18,6 +18,7 @@ REGION="$(resolve_region "$DEPLOY_CONFIG")"
 IMAGE_TAG="$(json_val "$DEPLOY_CONFIG" imageTag)"
 REGISTRY="$(json_val "$DEPLOY_CONFIG" ecrRepositoryPrefix)"
 APP_NAME="$(json_val "$DEPLOY_CONFIG" appName)"
+COMPOSE="docker compose -f ${INSTALL_DIR}/compose.framework.yml -f ${INSTALL_DIR}/compose.modules.yml -f ${INSTALL_DIR}/compose.application.yml"
 
 log() { echo "[start $(date -Is)] $*"; }
 mkdir -p "$INSTALL_DIR"
@@ -33,13 +34,18 @@ if ! docker pull "$BACKEND_IMAGE"; then
   exit 0
 fi
 
-# Extract the deploy/ payload (compose, Caddy template, scripts).
+# Extract the deploy/ payload (compose layers, Caddy template, scripts).
 CID="$(docker create "$BACKEND_IMAGE" true)"
 trap 'docker rm -f "$CID" >/dev/null 2>&1 || true' EXIT
 rm -rf "${INSTALL_DIR}/.deploy-new"
 mkdir -p "${INSTALL_DIR}/.deploy-new"
 docker cp "${CID}:/deploy/." "${INSTALL_DIR}/.deploy-new/"
-cp "${INSTALL_DIR}/.deploy-new/compose.prod.yml" "${INSTALL_DIR}/compose.prod.yml"
+cp "${INSTALL_DIR}/.deploy-new/compose.framework.yml" "${INSTALL_DIR}/compose.framework.yml"
+cp "${INSTALL_DIR}/.deploy-new/compose.modules.yml" "${INSTALL_DIR}/compose.modules.yml"
+# Host-owned overlay: seed once, never overwritten (ADR-008 D1).
+if [ ! -f "${INSTALL_DIR}/compose.application.yml" ]; then
+  cp "${INSTALL_DIR}/.deploy-new/compose.application.yml" "${INSTALL_DIR}/compose.application.yml"
+fi
 cp "${INSTALL_DIR}/.deploy-new/Caddyfile.tmpl" "${INSTALL_DIR}/Caddyfile.tmpl"
 rm -rf "${INSTALL_DIR}/scripts"
 cp -R "${INSTALL_DIR}/.deploy-new/scripts" "${INSTALL_DIR}/scripts"
@@ -53,6 +59,6 @@ rm -rf "${INSTALL_DIR}/.deploy-new"
 docker pull "$FRONTEND_IMAGE" || log "WARNING: ${FRONTEND_IMAGE} not available yet"
 
 cd "$INSTALL_DIR"
-docker compose -f compose.prod.yml pull
-docker compose -f compose.prod.yml up -d
+$COMPOSE pull
+$COMPOSE up -d
 log "stack started"

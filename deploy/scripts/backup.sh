@@ -18,7 +18,7 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
 INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-COMPOSE="docker compose -f ${INSTALL_DIR}/compose.prod.yml"
+COMPOSE="docker compose -f ${INSTALL_DIR}/compose.framework.yml -f ${INSTALL_DIR}/compose.modules.yml -f ${INSTALL_DIR}/compose.application.yml"
 REGION="$(resolve_region "$INSTALL_DIR/deploy.config.json")"
 cd "$INSTALL_DIR"
 

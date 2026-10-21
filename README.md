@@ -47,7 +47,8 @@ Business code — `src/application/`, `src/modules/`, your Prisma models outside
 
 `deploy/` ships a reference single-host production stack (Docker Compose behind Caddy, S3 backups, CloudWatch metrics). Files fall into three ownership classes:
 
-- **Framework-synced** — `scripts/*.sh`, `compose.prod.yml`, `Caddyfile.tmpl`: owned by this template and kept byte-identical in consuming projects via `newbie update-template`; never edit them downstream.
+- **Framework-synced** — `scripts/*.sh`, `compose.framework.yml`, `Caddyfile.tmpl`: owned by this template and kept byte-identical in consuming projects via `newbie update-template`; never edit them downstream.
+- **Generated / host-owned compose layers** — `compose.modules.yml` is rendered by `newbie assemble` from the enabled module set (ADR-008; never hand-edit), and `compose.application.yml` is the host-private overlay tooling never touches. Scripts always run docker compose with all three `-f` flags in that order.
 - **Scaffold defaults** — `clickhouse/config.d/memory.xml`: copied by `create` but never synced; tune per host.
 - **Not in the template** — `env.template` (secret manifest), `aws/stack.yml` (CloudFormation), and the two host config JSONs (`deploy.config.json` / `env.config.json`; schema in `scripts/lib.sh`) are host-owned and live outside the template.
 
