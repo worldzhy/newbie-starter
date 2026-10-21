@@ -35,6 +35,15 @@ jobs:
       - name: Format check
         run: npm run format:check
 
+      # ADR-009 D4: every file this template ships must be classified in the
+      # newbie CLI ownership registry (unlisted = error), and the template must
+      # match its own registry version.
+      - name: Template ownership registry
+        run: npm run check:template
+
+      - name: Lint
+        run: npm run lint
+
       # prisma.config eagerly resolves PRISMA_DATABASE_URL even for generate;
       # use a non-connecting placeholder — generate never opens a connection.
       - name: Prisma generate
@@ -44,3 +53,14 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # ADR-008 verification chain #3: the merged three-layer compose model
+      # must stay valid, including the UI-less shape (frontend is gated
+      # behind the "ui" profile; caddy marks that dependency required: false).
+      - name: Validate merged compose model
+        working-directory: deploy
+        run: |
+          printf 'APP_NAME=ci-smoke\nECR_REPOSITORY_PREFIX=placeholder\nIMAGE_TAG=ci\n' > .env
+          docker compose -f compose.framework.yml -f compose.modules.yml -f compose.application.yml config --quiet
+          COMPOSE_PROFILES=ui docker compose -f compose.framework.yml -f compose.modules.yml -f compose.application.yml config --quiet
+          rm .env

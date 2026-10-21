@@ -2,7 +2,16 @@
   "collection": "@nestjs/schematics",
   "sourceRoot": "src",
   "compilerOptions": {
-    "assets": [],
+    "assets": [
+      {
+        "include": "modules/*/templates/**/*",
+        "outDir": "dist"
+      },
+      {
+        "include": "modules/*/clickhouse-migrations/*.sql",
+        "outDir": "dist"
+      }
+    ],
     "watchAssets": true
   }
 }
