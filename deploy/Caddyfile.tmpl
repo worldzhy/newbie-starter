@@ -5,14 +5,15 @@
 # is mounted read-only into the caddy container as /etc/caddy/Caddyfile.
 #
 # ROUTING CONSTRAINT — keep in sync with backend route layout (ADR-012):
-# The web-monitor module exposes controllers natively under /web-monitor/* (the
-# browser SDK reports to https://<domain>/web-monitor/report and the backend
-# @PublicCors registry matches the exact route). Those paths must be proxied
-# WITHOUT stripping /api. All other /api/* paths are backend controllers
-# without a global prefix, so /api is stripped there — this mirrors the
-# Next.js dev rewrite /api/:path* -> 127.0.0.1:3000/:path*.
-# Any new backend-native /api/<segment> route requires a new exception above
-# the stripping block.
+# A module whose manifest declares `publicNamespace: true` claims the public
+# URL space /<module-key>/* on the site domain; `newbie assemble` renders one
+# pass-through `handle /<module-key>/*` block per claim between the
+# @@newbie-modules markers below (ADR-008 D4 — never hand-edit the marker
+# block). Those backend-native paths are proxied WITHOUT stripping /api.
+# All other /api/* paths are backend controllers without a global prefix, so
+# /api is stripped there — this mirrors the Next.js dev rewrite
+# /api/:path* -> 127.0.0.1:3000/:path*. Any new backend-native route outside
+# /api must arrive via its module's publicNamespace declaration.
 
 {
 	email __ACME_EMAIL__
@@ -25,10 +26,8 @@ __SITE_DOMAIN__ {
 		respond "ok" 200
 	}
 
-	# Backend-native /web-monitor routes: forward unchanged (browser SDK ingestion).
-	handle /web-monitor/* {
-		reverse_proxy backend:3000
-	}
+# @@newbie-modules-start
+# @@newbie-modules-end
 
 	# Remaining backend API: strip the /api prefix.
 	handle /api/* {
