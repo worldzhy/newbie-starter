@@ -47,3 +47,14 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # ADR-008 verification chain #3: the merged three-layer compose model
+      # must stay valid, including the UI-less shape (frontend is gated
+      # behind the "ui" profile; caddy marks that dependency required: false).
+      - name: Validate merged compose model
+        working-directory: deploy
+        run: |
+          printf 'APP_NAME=ci-smoke\nECR_REPOSITORY_PREFIX=placeholder\nIMAGE_TAG=ci\n' > .env
+          docker compose -f compose.framework.yml -f compose.modules.yml -f compose.application.yml config --quiet
+          COMPOSE_PROFILES=ui docker compose -f compose.framework.yml -f compose.modules.yml -f compose.application.yml config --quiet
+          rm .env
