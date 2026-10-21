@@ -1,6 +1,6 @@
 # newbie-basic-template
 
-Backend project skeleton for the [newbie](https://github.com/worldzhy/newbie) framework (NestJS + Prisma). Framework runtime code ships as the `@devbie/newbie` npm package; modules are copied in from the `newbie-modules` registry by the CLI.
+Backend project skeleton for the [newbie](https://github.com/worldzhy/devbie) framework (NestJS + Prisma). Framework runtime code ships as the `@devbie/newbie` npm package; modules are copied in from the `newbie-modules` registry by the CLI.
 
 ## Create a project
 

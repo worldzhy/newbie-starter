@@ -1,7 +1,7 @@
 # Dependabot configuration for the newbie starter template.
 #
 # This repo is the single source of truth for the newbie basic template
-# (see ADR-003 in worldzhy/newbie). Dependabot watches npm dependencies
+# (see ADR-003 in worldzhy/devbie). Dependabot watches npm dependencies
 # and GitHub Actions used by the template so generated apps start from a
 # current, CVE-clean skeleton.
 version: 2

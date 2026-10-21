@@ -1,7 +1,9 @@
-import backend from "@devbie/style-guide/eslint/backend";
+import base from "@devbie/style-guide/eslint/base";
+import nest from "@devbie/style-guide/eslint/nest";
 
 export default [
-  ...backend,
+  ...base,
+  ...nest,
   {
     ignores: ["dist/**", "coverage/**"],
   },

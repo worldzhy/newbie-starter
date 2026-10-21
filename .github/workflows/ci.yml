@@ -1,15 +1,17 @@
 # Build gate for the newbie starter template.
 #
-# This repo IS the template (ADR-003 in worldzhy/newbie) — nightwatch's GitHub
+# This repo IS the template (ADR-003 in worldzhy/devbie) — nightwatch's GitHub
 # generate flow clones it as-is. A green build here is the only guarantee that
-# generated apps start from a working skeleton, so every push and PR must
-# produce a clean `nest build`.
+# generated apps start from a working skeleton, so every dev push and every PR
+# against dev must produce a clean `nest build`. main re-runs nothing: it only
+# receives dev commits that already carry a green run here.
 name: CI
 
 on:
   push:
-    branches: [main, dev]
+    branches: [dev]
   pull_request:
+    branches: [dev]
   workflow_dispatch:
 
 concurrency:
@@ -17,7 +19,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
