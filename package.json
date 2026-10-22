@@ -14,6 +14,7 @@
     "lint": "eslint \"src/**/*.ts\"",
     "lint:fix": "eslint \"src/**/*.ts\" --fix",
     "newbie": "newbie",
+    "prepare": "command -v git >/dev/null 2>&1 && git config core.hooksPath .githooks || true",
     "start": "nest start",
     "start:debug": "nest start --debug --watch",
     "start:dev": "nest start --watch",
