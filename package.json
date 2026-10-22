@@ -18,8 +18,7 @@
     "start": "nest start",
     "start:debug": "nest start --debug --watch",
     "start:dev": "nest start --watch",
-    "start:prod": "node dist/src/main.js",
-    "test": "find src -name '*.test.ts' -print0 | xargs -0 -r node --import tsx --test"
+    "start:prod": "node dist/src/main.js"
   },
   "dependencies": {
     "@devbie/newbie": "^1.5.0",
