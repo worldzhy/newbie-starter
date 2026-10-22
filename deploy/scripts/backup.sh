@@ -190,7 +190,9 @@ while IFS=$'\t' read -r service engine; do
   if ! declare -F "backup_${engine}" >/dev/null; then
     die "label newbie.backup-engine=${engine} on service ${service} has no backup_${engine}() function"
   fi
-  "backup_${engine}" "$service"
+  # < /dev/null: compose run/exec forward stdin by default, which would
+  # consume the loop's remaining service list after the first engine.
+  "backup_${engine}" "$service" < /dev/null
   COMPLETED_ENGINES="${COMPLETED_ENGINES:+$COMPLETED_ENGINES, }${engine}"
 done <<< "$ENGINE_SERVICES"
 
