@@ -24,5 +24,11 @@
       "@devbie/newbie/*": ["./node_modules/@devbie/newbie/dist/*"],
       "@/*": ["./src/*"]
     }
+  },
+  "ts-node": {
+    "transpileOnly": true,
+    "compilerOptions": {
+      "rootDir": "."
+    }
   }
 }
