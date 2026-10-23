@@ -8,17 +8,17 @@
   "prettier": "@devbie/style-guide/prettier",
   "scripts": {
     "build": "nest build",
-    "check:template": "newbie update-template --check --template-path .",
+    "check:template": "newbie sync-template --check --template-path .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint \"src/**/*.ts\"",
     "lint:fix": "eslint \"src/**/*.ts\" --fix",
     "newbie": "newbie",
+    "prepare": "command -v git >/dev/null 2>&1 && git config core.hooksPath .githooks || true",
     "start": "nest start",
     "start:debug": "nest start --debug --watch",
     "start:dev": "nest start --watch",
-    "start:prod": "node dist/src/main.js",
-    "test": "find src -name '*.test.ts' -print0 | xargs -0 -r node --import tsx --test"
+    "start:prod": "node dist/src/main.js"
   },
   "dependencies": {
     "@devbie/newbie": "^1.5.0",
