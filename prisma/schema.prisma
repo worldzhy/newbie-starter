@@ -9,7 +9,7 @@
 
 // @@newbie-framework-start
 // Framework-managed block: generator + datasource. Preserve the markers when
-// adding project models; `newbie sync-template` only touches this block.
+// adding project models; `newbie template sync` only touches this block.
 generator client {
   provider        = "prisma-client"
   previewFeatures = ["fullTextSearchPostgres"]

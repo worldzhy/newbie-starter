@@ -2,7 +2,7 @@
 #
 # This file owns only the framework services: postgres (+ its migrator),
 # backend, caddy and the optional frontend. Module-derived services live in
-# compose.modules.yml (rendered by `newbie assemble` — do not hand-edit), and
+# compose.modules.yml (rendered by `newbie modules install` — do not hand-edit), and
 # host-private services/overrides live in compose.application.yml (host-owned,
 # never touched by tooling). Scripts always run docker compose with the three
 # -f flags in that order; compose merges depends_on across files, so the
@@ -25,7 +25,7 @@
 #   /healthz        -> Caddy responds directly
 #   /<module-key>/* -> backend as-is, one block per module declaring
 #                      publicNamespace (rendered into Caddyfile.tmpl by
-#                      `newbie assemble`; e.g. web-monitor SDK reports)
+#                      `newbie modules install`; e.g. web-monitor SDK reports)
 #   /api/*          -> backend with /api stripped (mirrors the dev rewrite)
 #   everything else -> frontend
 

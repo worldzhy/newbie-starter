@@ -1,4 +1,4 @@
-# Framework-managed block (ADR-009): `newbie sync-template` rewrites it in
+# Framework-managed block (ADR-009): `newbie template sync` rewrites it in
 # place. Project-specific ignores belong outside the markers.
 # @@newbie-framework-start
 # compiled output
