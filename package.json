@@ -8,7 +8,7 @@
   "prettier": "@devbie/style-guide/prettier",
   "scripts": {
     "build": "nest build",
-    "check:template": "newbie template sync --check --template-path .",
+    "check:template": "newbie template update --check --template-path .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint \"src/**/*.ts\"",
