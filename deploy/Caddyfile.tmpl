@@ -6,7 +6,7 @@
 #
 # ROUTING CONSTRAINT — keep in sync with backend route layout (ADR-012):
 # A module whose manifest declares `publicNamespace: true` claims the public
-# URL space /<module-key>/* on the site domain; `newbie modules install` renders one
+# URL space /<module-key>/* on the site domain; `newbie modules apply` renders one
 # pass-through `handle /<module-key>/*` block per claim between the
 # @@newbie-modules markers below (ADR-008 D4 — never hand-edit the marker
 # block). Those backend-native paths are proxied WITHOUT stripping /api.
