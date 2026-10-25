@@ -1,7 +1,7 @@
 # Application-owned compose overlay (ADR-008 D1).
 #
 # This file belongs to the host application. Framework tooling never touches
-# it: `newbie sync-template` does not sync it and `newbie assemble` does not
+# it: `newbie template update` does not sync it and `newbie modules apply` does not
 # render it. Add host-private services or per-host overrides here.
 #
 # Scripts always pass -f compose.framework.yml -f compose.modules.yml

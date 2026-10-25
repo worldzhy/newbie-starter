@@ -138,11 +138,16 @@ backup_redis() {
   CURRENT_ENGINE="redis"; CURRENT_ENGINE_KEY="$key"; CURRENT_ENGINE_START="$(now_ms)"
   before="$($COMPOSE exec -T "$service" redis-cli -a "$pass" --no-auth-warning LASTSAVE | tr -d '[:space:]')"
   $COMPOSE exec -T "$service" redis-cli -a "$pass" --no-auth-warning BGSAVE >/dev/null
+  now="$before"
   for _ in $(seq 1 60); do
     now="$($COMPOSE exec -T "$service" redis-cli -a "$pass" --no-auth-warning LASTSAVE | tr -d '[:space:]')"
     [ "$now" != "$before" ] && break
     sleep 1
   done
+  if [ "$now" = "$before" ]; then
+    echo "redis BGSAVE did not complete within 60s" >&2
+    return 1
+  fi
   cp "$INSTALL_DIR/data/${service}/dump.rdb" "$WORKDIR/dump.rdb"
   aws --region "$REGION" s3 cp --quiet \
     "$WORKDIR/dump.rdb" "s3://${BUCKET}/${key}"
