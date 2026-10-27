@@ -55,7 +55,7 @@ services:
     restart: "no"
     env_file:
       - ./.env
-    command: ["npx", "prisma", "migrate", "deploy"]
+    command: ["npx", "prisma", "db", "push", "--skip-generate"]
     networks:
       - nwb
     depends_on:
