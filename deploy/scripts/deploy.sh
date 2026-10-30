@@ -53,6 +53,15 @@ else
         services+=("$one_shot")
       fi
     done < <($COMPOSE config --services | grep -- '-migrate$' || true)
+
+    # db-seed is not a migrator (it does not match the -migrate$ pattern) but
+    # it must also run on every backend release so its idempotent seed
+    # converges. Projects that do not declare the service are unaffected.
+    if $COMPOSE config --services | grep -qx "db-seed"; then
+      if ! printf '%s\n' "${services[@]}" | grep -qx "db-seed"; then
+        services+=("db-seed")
+      fi
+    fi
   fi
 
   $COMPOSE up -d "${services[@]}"
