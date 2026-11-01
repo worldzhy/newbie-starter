@@ -54,8 +54,25 @@ if [ ! -f "$INSTALL_DIR/Caddyfile.tmpl" ]; then
   echo "Caddyfile.tmpl missing; run start.sh first to extract deploy assets" >&2
   exit 1
 fi
+
+# The fallback route depends on whether a frontend exists (ADR-008 D1): UI-less
+# hosts keep the framework's "ui" profile off, and proxying to the absent
+# frontend service would answer 502 for every non-API path. Ask the merged
+# compose model which services it actually enables; if compose cannot answer,
+# keep the shipped frontend route so a UI host never loses its frontend.
+FRONTEND_FALLBACK="reverse_proxy frontend:3001"
+if SERVICES="$(docker compose --project-directory "$INSTALL_DIR" --env-file "$INSTALL_DIR/.env" \
+  -f "$INSTALL_DIR/compose.framework.yml" \
+  -f "$INSTALL_DIR/compose.modules.yml" \
+  -f "$INSTALL_DIR/compose.application.yml" config --services 2>/dev/null)"; then
+  printf '%s\n' "$SERVICES" | grep -qx frontend || FRONTEND_FALLBACK='respond "" 404'
+else
+  echo "compose model unavailable; keeping the frontend fallback route" >&2
+fi
+
 sed -e "s|__SITE_DOMAIN__|${SITE_DOMAIN}|g" \
   -e "s|__ACME_EMAIL__|${ACME_EMAIL}|g" \
+  -e "s|__FRONTEND_FALLBACK__|${FRONTEND_FALLBACK}|g" \
   "$INSTALL_DIR/Caddyfile.tmpl" > "$INSTALL_DIR/Caddyfile"
 chmod 644 "$INSTALL_DIR/Caddyfile"
 

@@ -30,7 +30,9 @@ log() { echo "[provision $(date -Is)] $*"; }
 # and env.config.json (schema: scripts/lib.sh). Deploys never overwrite them.
 
 # --- Base packages ------------------------------------------------------------
-dnf install -y dnf-utils device-mapper-persistent-data lvm2 jq aws-cli cronie
+# AL2023 ships AWS CLI v2 as `awscli-2`; the `aws-cli` name does not exist there,
+# and a miss under `set -e` aborts provisioning.
+dnf install -y dnf-utils device-mapper-persistent-data lvm2 jq awscli-2 cronie
 systemctl enable --now crond
 
 # --- Docker -------------------------------------------------------------------
