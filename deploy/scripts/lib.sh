@@ -37,13 +37,79 @@ Expected schema: $schema"
 # json_val FILE KEY — echo the (already validated) key's value.
 json_val() { jq -r --arg k "$2" '.[$k] // ""' "$1"; }
 
+# compose.application.yml zone markers (ADR-032): the block between them is
+# repository-managed orchestration, refreshed from the image on every deploy;
+# everything outside is instance-private and only seeded once. Markers live
+# inside the `services:` mapping, so matching tolerates leading indentation.
+APP_BLOCK_START='# @@newbie-framework-start'
+APP_BLOCK_END='# @@newbie-framework-end'
+
+marker_re() { printf '^[[:space:]]*%s[[:space:]]*$' "$1"; }
+
+has_marker() { grep -qE "$(marker_re "$1")" "$2"; }
+
+# install_compose_application IMAGE_COPY HOST_COPY — converge the host's
+# compose.application.yml with the image's copy per ADR-032:
+#   - host file absent          → seed the whole file (first install);
+#   - image copy lacks markers  → die (framework defect; fail closed so a
+#                                 silent no-op cannot reintroduce drift);
+#   - host copy lacks markers   → pre-ADR-032 install: back up to
+#                                 .pre-framework-block and replace wholesale
+#                                 (operator edits merge back by hand);
+#   - host copy has one marker  → die (ambiguous state, never guessed at);
+#   - both carry markers        → splice the image's framework block into the
+#                                 host file, leaving instance-private content
+#                                 outside the markers untouched.
+install_compose_application() {
+  local image_file="$1" host_file="$2"
+  if [ ! -f "$host_file" ]; then
+    cp "$image_file" "$host_file"
+    return
+  fi
+  if ! has_marker "$APP_BLOCK_START" "$image_file" || ! has_marker "$APP_BLOCK_END" "$image_file"; then
+    die "image compose.application.yml is missing the @@newbie-framework markers"
+  fi
+  local host_missing_start=0 host_missing_end=0
+  has_marker "$APP_BLOCK_START" "$host_file" || host_missing_start=1
+  has_marker "$APP_BLOCK_END" "$host_file" || host_missing_end=1
+  if [ "$host_missing_start" -eq 1 ] && [ "$host_missing_end" -eq 1 ]; then
+    cp "$host_file" "${host_file}.pre-framework-block"
+    cp "$image_file" "$host_file"
+    return
+  fi
+  if [ "$host_missing_start" -ne "$host_missing_end" ]; then
+    die "host compose.application.yml carries only one @@newbie-framework marker; merge ${host_file} by hand"
+  fi
+  local block_file tmp_file
+  block_file="$(mktemp)"
+  tmp_file="$(mktemp)"
+  sed -n "/$(marker_re "$APP_BLOCK_START")/,/$(marker_re "$APP_BLOCK_END")/p" "$image_file" >"$block_file"
+  [ -s "$block_file" ] || die "image compose.application.yml has a malformed @@newbie-framework block"
+  awk -v block="$block_file" \
+    -v "start_re=$(marker_re "$APP_BLOCK_START")" \
+    -v "end_re=$(marker_re "$APP_BLOCK_END")" '
+    $0 ~ start_re {
+      while ((getline line < block) > 0) print line
+      close(block)
+      inblock = 1
+      next
+    }
+    inblock && $0 ~ end_re { inblock = 0; next }
+    inblock { next }
+    { print }
+  ' "$host_file" >"$tmp_file"
+  # cat-preserves the inode out of habit (bind-mount single files read by
+  # inode); compose files are host-CLI inputs, so this is belt and braces.
+  cat "$tmp_file" >"$host_file"
+  rm -f "$tmp_file" "$block_file"
+}
+
 # extract_deploy_assets BACKEND_IMAGE INSTALL_DIR — copy the deploy/ payload
 # (compose layers, Caddy template, scripts) out of the backend image into the
 # install root. The image is the single source of truth; the host never
-# clones the repository. Framework files are refreshed on every call; the
-# host-owned compose.application.yml is only seeded once, never overwritten
-# (ADR-008 D1). cp goes through a temp dir so a failed extraction never
-# leaves partial files.
+# clones the repository. Framework files are refreshed on every call;
+# compose.application.yml converges per the two-zone contract (ADR-032). cp
+# goes through a temp dir so a failed extraction never leaves partial files.
 extract_deploy_assets() {
   local image="$1" install_dir="$2" cid
   cid="$(docker create "$image" true)"
@@ -53,10 +119,8 @@ extract_deploy_assets() {
   docker cp "${cid}:/deploy/." "${install_dir}/.deploy-new/"
   cp "${install_dir}/.deploy-new/compose.framework.yml" "${install_dir}/compose.framework.yml"
   cp "${install_dir}/.deploy-new/compose.modules.yml" "${install_dir}/compose.modules.yml"
-  # Host-owned overlay: seed once, never overwritten (ADR-008 D1).
-  if [ ! -f "${install_dir}/compose.application.yml" ]; then
-    cp "${install_dir}/.deploy-new/compose.application.yml" "${install_dir}/compose.application.yml"
-  fi
+  install_compose_application "${install_dir}/.deploy-new/compose.application.yml" \
+    "${install_dir}/compose.application.yml"
   cp "${install_dir}/.deploy-new/Caddyfile.tmpl" "${install_dir}/Caddyfile.tmpl"
   rm -rf "${install_dir}/scripts"
   cp -R "${install_dir}/.deploy-new/scripts" "${install_dir}/scripts"
