@@ -18,7 +18,8 @@
     "start": "nest start",
     "start:debug": "nest start --debug --watch",
     "start:dev": "nest start --watch",
-    "start:prod": "node dist/src/main.js"
+    "start:prod": "node dist/src/main.js",
+    "test": "node --import tsx --test src/**/*.test.ts"
   },
   "dependencies": {
     "@devbie/newbie": "^1.11.3",
