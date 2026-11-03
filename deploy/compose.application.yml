@@ -1,12 +1,48 @@
-# Application-owned compose overlay (ADR-008 D1).
+# Application-owned compose overlay (ADR-008 D1, amended by ADR-032).
 #
-# This file belongs to the host application. Framework tooling never touches
-# it: `newbie template update` does not sync it and `newbie modules apply` does not
-# render it. Add host-private services or per-host overrides here.
+# Two zones inside `services:` — a YAML document may carry only one
+# `services:` key, so the framework block is a section of service entries,
+# not a file-level paragraph:
+#
+# - Between the @@newbie-framework markers: repository-managed orchestration.
+#   Every deploy refreshes this block from the backend image's copy; edit it
+#   in this repository, never on the instance. Services here may depends_on
+#   framework/module services (references only point downward).
+# - Outside the markers: instance-private. Seeded once from the image on
+#   first install, then never touched by deploys.
 #
 # Scripts always pass -f compose.framework.yml -f compose.modules.yml
 # -f compose.application.yml in that order, so same-key fields here win over
-# the lower layers. References only point downward: services here may
-# depends_on framework/module services, never the other way around.
+# the lower layers.
 
-services: {}
+services:
+  # @@newbie-framework-start
+  # One-shot seed that converges declarative assets (first admin, templates).
+  # Mirrors the framework layer's postgres-migrate pattern: same image,
+  # restart "no", runs after migrations complete. `prisma db seed` resolves
+  # the seed command from prisma.config.ts (tsx ./prisma/seed.ts); tsx ships
+  # in the image's node_modules.
+  db-seed:
+    image: ${ECR_REPOSITORY_PREFIX}/${APP_NAME}-backend:${IMAGE_TAG}
+    restart: "no"
+    env_file:
+      - ./.env
+    command: ["npx", "prisma", "db", "seed"]
+    networks:
+      - nwb
+    depends_on:
+      postgres-migrate:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+
+  # Compose merges depends_on across files, so this attaches the seed to the
+  # framework layer's backend without touching compose.framework.yml.
+  backend:
+    depends_on:
+      db-seed:
+        condition: service_completed_successfully
+  # @@newbie-framework-end
+
+  # Instance-private services and per-host overrides below this line are
+  # seeded once and never overwritten by deploys (ADR-032).

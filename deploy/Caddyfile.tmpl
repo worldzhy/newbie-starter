@@ -35,8 +35,11 @@ __SITE_DOMAIN__ {
 		reverse_proxy backend:3000
 	}
 
-	# Everything else is the Next.js frontend.
+	# Everything else is the Next.js frontend on hosts that ship a UI.
+	# UI-less hosts run without the "ui" profile, so an unconditional proxy here
+	# would answer 502 for every non-API path; render-env.sh swaps this line for
+	# a 404 when the merged compose model has no frontend service (ADR-008 D1).
 	handle {
-		reverse_proxy frontend:3001
+		__FRONTEND_FALLBACK__
 	}
 }
