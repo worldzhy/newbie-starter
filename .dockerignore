@@ -1,0 +1,13 @@
+# Prune everything npm ci and the Next/Nest build already pulled or produce.
+# These files bloat the build context and slow down rebuilds.
+node_modules
+dist
+.next
+.git
+.github
+.trae
+*.log
+.DS_Store
+.env*
+!.env.example
+coverage
