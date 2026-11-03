@@ -37,8 +37,10 @@ BUCKET="$(env_value BACKUP_BUCKET)"
 APP_NAME="$(env_value APP_NAME)"
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
 STARTED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-WORKDIR="${INSTALL_DIR}/backup-tmp"
-mkdir -p "$WORKDIR"
+# Ephemeral per-run temp dir; never persists past the script exit. Plaintext
+# dumps only live here while being copied to S3.
+WORKDIR="$(mktemp -d "${INSTALL_DIR}/.backup-tmp.XXXXXX")"
+trap 'rm -rf "$WORKDIR"' EXIT
 
 now_ms() { date +%s%3N; }
 
@@ -65,8 +67,14 @@ write_manifest() {
   printf '{"runId": "%s", "startedAt": "%s", "finishedAt": "%s", "status": "%s", "engines": {%s}}\n' \
     "$RUN_ID" "$STARTED_AT" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" "$ENGINES_JSON" \
     > "$WORKDIR/manifest.json"
-  aws --region "$REGION" s3 cp --quiet \
-    "$WORKDIR/manifest.json" "s3://${BUCKET}/manifests/${RUN_ID}.json" || true
+  # S3 upload failure: surface as a distinct error (manifest lost) so the
+  # cron log and the trailing BackupFailure metric both fire. Previously
+  # `|| true` swallowed both channels simultaneously.
+  if ! aws --region "$REGION" s3 cp --quiet \
+    "$WORKDIR/manifest.json" "s3://${BUCKET}/manifests/${RUN_ID}.json"; then
+    echo "[$(date -Is)] WARNING: manifest S3 upload failed for run ${RUN_ID}" >&2
+    return 1
+  fi
 }
 
 signal_failure() {
@@ -76,9 +84,13 @@ signal_failure() {
     CURRENT_ENGINE=""
   fi
   write_manifest failed
-  aws --region "$REGION" cloudwatch put-metric-data \
+  # CloudWatch metric failure: log explicitly instead of `|| true` so the
+  # cron log still carries the alarm signal when AWS is rate-limiting.
+  if ! aws --region "$REGION" cloudwatch put-metric-data \
     --namespace "$APP_NAME" \
-    --metric-data "MetricName=BackupFailure,Value=1,Unit=Count,Timestamp=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" || true
+    --metric-data "MetricName=BackupFailure,Value=1,Unit=Count,Timestamp=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"; then
+    echo "[$(date -Is)] WARNING: BackupFailure metric emit failed" >&2
+  fi
   echo "[$(date -Is)] BACKUP FAILED (engine: ${failed_engine})" >&2
 }
 trap signal_failure ERR
@@ -110,18 +122,20 @@ backup_mongodb() {
   # from MONGO_URL — the secret owns it. The engine key is the run prefix
   # (trailing slash); the archive file name is fixed (<db>.archive.gz) so
   # restore runbooks can expand the prefix without listing the bucket.
+  #
+  # The URI is injected via the container's MONGODB_URI env var — never on
+  # the command line, which would leak through `ps aux` to any process that
+  # can enumerate its children.
   local service="$1"
-  local user pass url db_name prefix
-  user="$(env_value MONGO_INITDB_ROOT_USERNAME)"
-  pass="$(env_value MONGO_INITDB_ROOT_PASSWORD)"
+  local url db_name prefix
   url="$(env_value MONGO_URL)"
   db_name="${url##*/}"
   db_name="${db_name%%\?*}"
   prefix="mongodb/${RUN_ID}"
   CURRENT_ENGINE="mongodb"; CURRENT_ENGINE_KEY="${prefix}/"; CURRENT_ENGINE_START="$(now_ms)"
-  $COMPOSE exec -T "$service" mongodump \
-    --uri "mongodb://${user}:${pass}@127.0.0.1:27017/${db_name}?authSource=admin" \
-    --archive --gzip > "$WORKDIR/${db_name}.archive.gz"
+  $COMPOSE exec -T -e MONGODB_URI="$url" "$service" \
+    bash -c 'mongodump --uri "$MONGODB_URI" --archive --gzip' \
+    > "$WORKDIR/${db_name}.archive.gz"
   aws --region "$REGION" s3 cp --quiet \
     "$WORKDIR/${db_name}.archive.gz" "s3://${BUCKET}/${prefix}/${db_name}.archive.gz"
   record_engine mongodb success "$(stat -c%s "$WORKDIR/${db_name}.archive.gz")" "$(( $(now_ms) - CURRENT_ENGINE_START ))" "${prefix}/"
@@ -131,16 +145,19 @@ backup_mongodb() {
 backup_redis() {
   # RDB snapshot: trigger BGSAVE, wait for LASTSAVE to advance, then copy the
   # dump out of the service's data directory (volume ./data/<service>).
+  # Password injected via REDISCLI_AUTH env — never on the -a argv flag, which
+  # would leak through `ps aux`.
   local service="$1"
   local pass key before now
   pass="$(env_value REDIS_PASSWORD)"
   key="redis/${RUN_ID}/dump.rdb"
   CURRENT_ENGINE="redis"; CURRENT_ENGINE_KEY="$key"; CURRENT_ENGINE_START="$(now_ms)"
-  before="$($COMPOSE exec -T "$service" redis-cli -a "$pass" --no-auth-warning LASTSAVE | tr -d '[:space:]')"
-  $COMPOSE exec -T "$service" redis-cli -a "$pass" --no-auth-warning BGSAVE >/dev/null
+  local redis_exec=( "$COMPOSE" exec -T -e REDISCLI_AUTH="$pass" "$service" )
+  before="$("${redis_exec[@]}" redis-cli LASTSAVE | tr -d '[:space:]')"
+  "${redis_exec[@]}" redis-cli BGSAVE >/dev/null
   now="$before"
   for _ in $(seq 1 60); do
-    now="$($COMPOSE exec -T "$service" redis-cli -a "$pass" --no-auth-warning LASTSAVE | tr -d '[:space:]')"
+    now="$("${redis_exec[@]}" redis-cli LASTSAVE | tr -d '[:space:]')"
     [ "$now" != "$before" ] && break
     sleep 1
   done
@@ -168,9 +185,11 @@ backup_clickhouse() {
   pass="$(env_value CLICKHOUSE_PASSWORD)"
   prefix="clickhouse/${RUN_ID}/"
   CURRENT_ENGINE="clickhouse"; CURRENT_ENGINE_KEY="$prefix"; CURRENT_ENGINE_START="$(now_ms)"
-  tables="$($COMPOSE exec -T "$service" clickhouse-client \
-    --user "$user" --password "$pass" \
-    --query "SELECT count() FROM system.tables WHERE database NOT IN ('system', 'INFORMATION_SCHEMA', 'information_schema')")"
+  # --password on the command line leaks through `ps`; use CLICKHOUSE_PASSWORD
+  # env which clickhouse-client honours natively.
+  tables="$($COMPOSE exec -T -e CLICKHOUSE_PASSWORD="$pass" "$service" \
+    clickhouse-client --user "$user" --query \
+    "SELECT count() FROM system.tables WHERE database NOT IN ('system', 'INFORMATION_SCHEMA', 'information_schema')")"
   if [ "$tables" -gt 0 ]; then
     $COMPOSE --profile backup run --rm "${service}-backup" create_remote "$RUN_ID" >/dev/null
     $COMPOSE --profile backup run --rm "${service}-backup" delete_remote older-than 14d >/dev/null || true
@@ -204,8 +223,8 @@ done <<< "$ENGINE_SERVICES"
 # --- Manifest (last write wins the run) --------------------------------------
 write_manifest success
 
-# --- Local cleanup (S3 retention is enforced by bucket lifecycle rules) -----
-find "$WORKDIR" -type f -mtime +7 -delete
+# No local cleanup needed — the EXIT trap already rm -rf'd the temp WORKDIR.
+# S3 retention (7d default) is enforced by the bucket lifecycle rules.
 
 aws --region "$REGION" cloudwatch put-metric-data \
   --namespace "$APP_NAME" \

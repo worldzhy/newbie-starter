@@ -35,7 +35,11 @@ aws --region "$REGION" secretsmanager get-secret-value \
   --secret-id "$SECRET_ID" --query SecretString --output text > "$TMP_JSON"
 
 umask 077
-jq -r 'to_entries | map("\(.key)=\(.value | tostring)") | join("\n")' \
+# Render KEY=VALUE lines from the JSON secret. jq -R escapes newlines as \n
+# and pipes/shell-special chars remain in value; the shell never re-parses
+# these lines — they're written raw to .env, which compose reads line by
+# line with "export KEY=VALUE" semantics.
+jq -r 'to_entries[] | "\(.key)=\(.value | tostring | gsub("\n"; "\\n"))"' \
   "$TMP_JSON" > "$INSTALL_DIR/.env"
 
 # Deployment plumbing injected from deploy.config.json, not the app secret:
