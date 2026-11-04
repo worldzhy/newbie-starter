@@ -1,38 +1,54 @@
 # Production image for newbie-starter-based NestJS backends.
 #
-# Multi-stage build keeps the final image small (~200MB): install + build
-# in a Node build stage, then copy only the compiled dist and production
-# node_modules into a clean Node runtime. Host repos that extend this
-# template may layer in their own secrets handling, health checks, or
-# database migrations — this is the minimum contract.
-#
-# The compose.application.yml uses this image via the
-# ${ECR_REPOSITORY_PREFIX}/${APP_NAME}-backend:${IMAGE_TAG} substitution.
+# The image is the single distribution channel for host-side operations:
+#   - app start:  node dist/src/main.js
+#   - migrations: npx prisma db push (one-shot "postgres-migrate" service)
+#   - first seed: npx prisma db seed  (one-shot "db-seed" service)
+#   - deploy/:    extracted from the image onto the host by start.sh
+# The full devDependencies are therefore kept in the runtime image (prisma CLI
+# and tsx are devDependencies), mirroring the proven nightwatch-backend
+# production image. Host repos that extend this template may layer in their
+# own secrets handling, health checks, or database migrations — this is the
+# minimum contract.
 
-# Stage 1: install deps + compile
-FROM node:22-alpine AS build
+# bookworm-slim (glibc) keeps native prebuilds (e.g. bcrypt) working; the
+# previous alpine image forced musl rebuilds that need a compiler toolchain.
+FROM node:22-bookworm-slim AS base
 WORKDIR /app
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl ca-certificates tini \
+  && rm -rf /var/lib/apt/lists/*
 
-# Copy manifest first so npm ci is cached across source edits.
+FROM base AS deps
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
+FROM base AS build
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npx nest build
+# prisma.config.ts evaluates PRISMA_DATABASE_URL eagerly; generation itself
+# never connects, a placeholder URL is enough.
+ENV PRISMA_DATABASE_URL=postgresql://placeholder:placeholder@localhost:5432/placeholder
+RUN npx prisma generate && npm run build
 
-# Stage 2: slim runtime
-FROM node:22-alpine AS runtime
-WORKDIR /app
+FROM base AS runtime
 ENV NODE_ENV=production
-# Prisma queries are validated against the server; client libs are already
-# compiled into dist, so we only need what npm ci pulls for production.
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
-
-# Fresh copy of compiled output (install stage may overwrite if deps include
-# a prepare script, but that's rare for production npm packages).
+ENV PORT=3000
+# node_modules carries prisma + tsx used by the migrate/seed one-shots.
+COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/generated ./generated
+COPY --from=build /app/prisma ./prisma
+COPY --from=build /app/prisma.config.ts ./prisma.config.ts
+# tsx resolves the @generated/* alias for prisma/seed.ts through tsconfig.json.
+COPY --from=build /app/tsconfig.json ./tsconfig.json
+COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/package-lock.json ./package-lock.json
+# deploy/ is extracted from this image onto the host (compose files, Caddyfile
+# template, operational scripts). The host never clones the repository.
+COPY --from=build /app/deploy /deploy
 
-EXPOSE 3000
 USER node
+EXPOSE 3000
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["node", "dist/src/main.js"]
