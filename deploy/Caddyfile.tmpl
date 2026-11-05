@@ -4,16 +4,16 @@
 # scripts/render-env.sh (values come from Secrets Manager). The rendered file
 # is mounted read-only into the caddy container as /etc/caddy/Caddyfile.
 #
-# ROUTING CONSTRAINT — keep in sync with backend route layout (ADR-012):
-# A module whose manifest declares `publicNamespace: true` claims the public
-# URL space /<module-key>/* on the site domain; `newbie modules apply` renders one
-# pass-through `handle /<module-key>/*` block per claim between the
-# @@newbie-modules markers below (ADR-008 D4 — never hand-edit the marker
-# block). Those backend-native paths are proxied WITHOUT stripping /api.
-# All other /api/* paths are backend controllers without a global prefix, so
-# /api is stripped there — this mirrors the Next.js dev rewrite
-# /api/:path* -> 127.0.0.1:3000/:path*. Any new backend-native route outside
-# /api must arrive via its module's publicNamespace declaration.
+# ROUTING (ADR-012, revised by ADR-034):
+# Every backend route lives under /api/*. Caddy strips that prefix and proxies
+# to the backend, which registers controllers without a global prefix — this
+# mirrors the Next.js dev rewrite /api/:path* -> 127.0.0.1:3000/:path*.
+# Modules no longer claim a public URL namespace (`publicNamespace` was dropped
+# in ADR-034), so there is no per-module handle block and no generated region
+# in this file: module routes arrive through the single /api/* handler below.
+#
+# The file is framework-owned and byte-identical across projects; `newbie
+# template update` overwrites it whole. Propose changes in newbie-starter.
 
 {
 	email __ACME_EMAIL__
@@ -26,10 +26,7 @@ __SITE_DOMAIN__ {
 		respond "ok" 200
 	}
 
-# @@newbie-modules-start
-# @@newbie-modules-end
-
-	# Remaining backend API: strip the /api prefix.
+	# Backend API: strip the /api prefix.
 	handle /api/* {
 		uri strip_prefix /api
 		reverse_proxy backend:3000
