@@ -7,6 +7,9 @@
 /node_modules
 *.tsbuildinfo
 
+# newbie CLI module backups (written before `modules update` overwrites a module)
+/.newbie/backups
+
 # dotenv environment variables file
 .env
 
