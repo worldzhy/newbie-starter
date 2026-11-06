@@ -18,9 +18,9 @@ fi
 # layout is <install>/scripts/provision.sh, so the install root is the
 # script's parent directory.
 INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-REGION="$(TOKEN=$(curl -sf -X PUT http://169.254.169.254/latest/api/token \
+REGION="$(TOKEN=$(curl -sf --max-time 60 -X PUT http://169.254.169.254/latest/api/token \
   -H 'X-aws-ec2-metadata-token-ttl-seconds: 60') && \
-  curl -sf -H "X-aws-ec2-metadata-token: $TOKEN" \
+  curl -sf --max-time 60 -H "X-aws-ec2-metadata-token: $TOKEN" \
   http://169.254.169.254/latest/meta-data/placement/region)"
 
 log() { echo "[provision $(date -Is)] $*"; }
@@ -70,7 +70,7 @@ if ! rpm -q amazon-cloudwatch-agent >/dev/null 2>&1; then
     aarch64) CW_AGENT_ARCH=arm64 ;;
     *) CW_AGENT_ARCH=amd64 ;;
   esac
-  curl -sf -o "$CW_AGENT_RPM" \
+  curl -sf --max-time 60 -o "$CW_AGENT_RPM" \
     "https://s3.${REGION}.amazonaws.com/amazoncloudwatch-agent/amazon_linux/${CW_AGENT_ARCH}/latest/amazon-cloudwatch-agent.rpm"
   rpm -U "$CW_AGENT_RPM"
 fi

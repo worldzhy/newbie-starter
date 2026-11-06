@@ -139,10 +139,10 @@ resolve_region() {
     region="$(jq -r '.region // ""' "$file" 2>/dev/null || true)"
   fi
   if [ -z "$region" ]; then
-    token="$(curl -sf -X PUT http://169.254.169.254/latest/api/token \
+    token="$(curl -sf --max-time 60 -X PUT http://169.254.169.254/latest/api/token \
       -H 'X-aws-ec2-metadata-token-ttl-seconds: 60' || true)"
     if [ -n "$token" ]; then
-      region="$(curl -sf -H "X-aws-ec2-metadata-token: $token" \
+      region="$(curl -sf --max-time 60 -H "X-aws-ec2-metadata-token: $token" \
         http://169.254.169.254/latest/meta-data/placement/region || true)"
     fi
   fi
