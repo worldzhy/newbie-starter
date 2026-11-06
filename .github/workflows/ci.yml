@@ -67,3 +67,8 @@ jobs:
           docker compose -f compose.framework.yml -f compose.modules.yml -f compose.application.yml config --quiet
           COMPOSE_PROFILES=ui docker compose -f compose.framework.yml -f compose.modules.yml -f compose.application.yml config --quiet
           rm .env
+
+      # Image gate (R15-06): generated apps deploy this Dockerfile, so a broken
+      # build must fail here instead of at the consumer's first deployment.
+      - name: Docker image build
+        run: docker build --pull -t newbie-starter:ci .
