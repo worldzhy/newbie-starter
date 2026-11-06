@@ -26,6 +26,9 @@ RUN npm ci --no-audit --no-fund
 FROM base AS build
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# Freshly created projects enable modules later; materialize an empty install
+# manifest when the template itself is built so the runtime COPY never fails.
+RUN if [ ! -f newbie-modules.json ]; then printf '{"registry":null,"modules":[]}\n' > newbie-modules.json; fi
 # prisma.config.ts evaluates PRISMA_DATABASE_URL eagerly; generation itself
 # never connects, a placeholder URL is enough.
 ENV PRISMA_DATABASE_URL=postgresql://placeholder:placeholder@localhost:5432/placeholder
@@ -38,6 +41,10 @@ ENV PORT=3000
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/generated ./generated
+# Module-hub reporter reads the install manifest and per-module manifests at
+# runtime (readModuleSnapshot on process.cwd()).
+COPY --from=build /app/newbie-modules.json ./newbie-modules.json
+COPY --from=build /app/src/modules ./src/modules
 COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/prisma.config.ts ./prisma.config.ts
 # tsx resolves the @generated/* alias for prisma/seed.ts through tsconfig.json.
