@@ -95,6 +95,11 @@ services:
     restart: unless-stopped
     # UI-less hosts run without the "ui" profile; see the header comment.
     profiles: ["ui"]
+    # Runtime env for the Node server (e.g. reporter tokens consumed by
+    # Next.js instrumentation). NEXT_PUBLIC_* values are build-time inlined
+    # and unaffected by this — see the host's frontend Dockerfile build-args.
+    env_file:
+      - ./.env
     environment:
       - PORT=3001
       - HOSTNAME=0.0.0.0
