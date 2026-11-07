@@ -22,7 +22,7 @@
     "test": "node --import tsx --test src/**/*.test.ts"
   },
   "dependencies": {
-    "@devbie/newbie": "^1.12.0",
+    "@devbie/newbie": "^1.13.0",
     "@nestjs/axios": "^12.0.1",
     "@nestjs/common": "^12.3.2",
     "@nestjs/config": "^12.0.1",
@@ -42,7 +42,7 @@
     "rxjs": "^7.8.1"
   },
   "devDependencies": {
-    "@devbie/newbie-cli": "^1.18.2",
+    "@devbie/newbie-cli": "^1.19.0",
     "@devbie/style-guide": "^1.5.0",
     "@nestjs/cli": "^12.0.11",
     "@nestjs/schematics": "^12.0.12",
