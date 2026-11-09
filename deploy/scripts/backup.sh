@@ -152,7 +152,9 @@ backup_redis() {
   pass="$(env_value REDIS_PASSWORD)"
   key="redis/${RUN_ID}/dump.rdb"
   CURRENT_ENGINE="redis"; CURRENT_ENGINE_KEY="$key"; CURRENT_ENGINE_START="$(now_ms)"
-  local redis_exec=( "$COMPOSE" exec -T -e REDISCLI_AUTH="$pass" "$service" )
+  # $COMPOSE is a multi-word string; expand it unquoted so the array holds one
+  # word per argument (quoting would make the whole string the command name).
+  local redis_exec=( $COMPOSE exec -T -e REDISCLI_AUTH="$pass" "$service" )
   before="$("${redis_exec[@]}" redis-cli LASTSAVE | tr -d '[:space:]')"
   "${redis_exec[@]}" redis-cli BGSAVE >/dev/null
   now="$before"
