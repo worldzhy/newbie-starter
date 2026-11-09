@@ -22,6 +22,21 @@
 __SITE_DOMAIN__ {
 	encode zstd gzip
 
+	# Baseline security headers on every response (HTML document + API).
+	# The CSP keeps script-src/style-src at 'unsafe-inline' because Next.js
+	# bootstrap and the theme bootstrap script are inline; tightening to a
+	# nonce-based CSP is tracked separately. connect-src allows any https
+	# endpoint so beacons (web-monitor) and same-origin /api keep working.
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		X-Frame-Options "DENY"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		-Server
+	}
+
 	handle /healthz {
 		respond "ok" 200
 	}
