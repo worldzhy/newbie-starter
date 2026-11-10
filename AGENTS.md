@@ -20,3 +20,18 @@ This repository is a [newbie](https://github.com/worldzhy/devbie) application (N
 <!-- @@newbie-framework-end -->
 
 <!-- Project-specific agent instructions go below; template update never rewrites this area. -->
+
+## Workflow conventions (see `user_profile.md` for full text)
+
+- Git branch: dev, never main
+- Pre-commit gate: `npm run format:check` must pass; never bare `git add -A`
+- This repo is a starter template, not an npm publisher; skeleton updates via `newbie template update`
+- Verify starter changes with `npm run build` and `npx newbie doctor`
+
+## Env facts
+
+Executable operation manuals live in devbie `.trae/documents/env-setup.md`. Read that file before any Shell call.
+
+## Backlog convention
+
+Unfinished engineering tasks live in the backlog file under .trae/documents (backlog.md). At session end, append leftover tasks there; at session start, check it for pending work. Delete items when done.
