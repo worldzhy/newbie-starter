@@ -21,16 +21,16 @@ This repository is a [newbie](https://github.com/worldzhy/devbie) application (N
 
 <!-- Project-specific agent instructions go below; template update never rewrites this area. -->
 
-## Workflow conventions (见 `user_profile.md` 全文)
+## Workflow conventions (see `user_profile.md` for full text)
 
-- Git 分支：dev 开发，main 禁止直写
-- 提交前门禁：`npm run format:check` 必过；禁止裸 `git add -A`
-- 本仓是模板仓，不发 npm 包；skeleton 更新由 newbie CLI 管理（`newbie template update`）
-- starter 本身的代码变更也需要跑 `npm run build` 和 `npx newbie doctor`
+- Git branch: dev, never main
+- Pre-commit gate: `npm run format:check` must pass; never bare `git add -A`
+- This repo is a starter template, not an npm publisher; skeleton updates via `newbie template update`
+- Verify starter changes with `npm run build` and `npx newbie doctor`
 
 ## Env facts
 
-可执行操作手册统一在 devbie 仓 `.trae/documents/env-setup.md`。Shell 调用前先读该文件。
+Executable operation manuals live in devbie `.trae/documents/env-setup.md`. Read that file before any Shell call.
 
 ## Backlog convention
 
