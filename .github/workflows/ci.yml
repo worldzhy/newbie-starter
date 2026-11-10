@@ -54,6 +54,12 @@ jobs:
         env:
           PRISMA_DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
 
+      # The template ships with a smoke test (R20-26): every generated project
+      # starts from this skeleton, so the baseline test must gate CI. Runs
+      # after Prisma generate because the module tree imports the client.
+      - name: Test
+        run: npm test
+
       - name: Build
         run: npm run build
 
