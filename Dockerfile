@@ -2,7 +2,8 @@
 #
 # The image is the single distribution channel for host-side operations:
 #   - app start:  node dist/src/main.js
-#   - migrations: npx prisma db push (one-shot "postgres-migrate" service)
+#   - migrations: npx prisma migrate deploy (one-shot "postgres-migrate" service,
+#                 applied from the host's prisma/migrations; ADR-036)
 #   - first seed: npx prisma db seed  (one-shot "db-seed" service)
 #   - deploy/:    extracted from the image onto the host by start.sh
 # The full devDependencies are therefore kept in the runtime image (prisma CLI

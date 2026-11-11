@@ -55,7 +55,12 @@ services:
     restart: "no"
     env_file:
       - ./.env
-    command: ["npx", "prisma", "db", "push"]
+    # Schema changes ship as versioned migrations (prisma/migrations/**), applied
+    # forward on every release. Create them with `prisma migrate dev`; never use
+    # `prisma db push` in an automated path (ADR-036). A host without any
+    # committed migration deploys a no-op here — the CI drift guard is what
+    # catches that.
+    command: ["npx", "prisma", "migrate", "deploy"]
     networks:
       - nwb
     depends_on:
