@@ -226,7 +226,7 @@ done <<< "$ENGINE_SERVICES"
 write_manifest success
 
 # No local cleanup needed — the EXIT trap already rm -rf'd the temp WORKDIR.
-# S3 retention (7d default) is enforced by the bucket lifecycle rules.
+# S3 retention is enforced by the bucket lifecycle rules in the host stack template.
 
 aws --region "$REGION" cloudwatch put-metric-data \
   --namespace "$APP_NAME" \
