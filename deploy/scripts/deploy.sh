@@ -6,7 +6,11 @@
 #   deploy.sh                 # pull + recreate the whole stack (runs migrations)
 #   deploy.sh backend         # new backend image; postgres-migrate + module migrators run automatically
 #   deploy.sh frontend        # deploy a new frontend image
-set -euo pipefail
+#
+# The exit code is a readiness judgement, not just compose's (ADR-047): every
+# recreated service must be healthy/running (one-shots must exit 0), and any
+# failure prints its own diagnostics instead of a bare exit status.
+set -eEuo pipefail
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
@@ -18,6 +22,7 @@ IMAGE_TAG="$(json_val "$DEPLOY_CONFIG" imageTag)"
 REGISTRY="$(json_val "$DEPLOY_CONFIG" ecrRepositoryPrefix)"
 APP_NAME="$(json_val "$DEPLOY_CONFIG" appName)"
 COMPOSE="docker compose -f ${INSTALL_DIR}/compose.framework.yml -f ${INSTALL_DIR}/compose.modules.yml -f ${INSTALL_DIR}/compose.application.yml"
+install_failure_trap
 
 cd "$INSTALL_DIR"
 
@@ -38,6 +43,9 @@ extract_deploy_assets "$BACKEND_IMAGE" "$INSTALL_DIR"
 if [ "$#" -eq 0 ]; then
   $COMPOSE pull
   $COMPOSE up -d
+  # Gate on what actually came up (profiled services stay out of the list).
+  mapfile -t deployed < <($COMPOSE ps --services)
+  wait_for_services_ready "${deployed[@]}"
 else
   $COMPOSE pull "$@"
 
@@ -65,6 +73,7 @@ else
   fi
 
   $COMPOSE up -d "${services[@]}"
+  wait_for_services_ready "${services[@]}"
 fi
 
 docker image prune -f >/dev/null
