@@ -27,13 +27,17 @@ __SITE_DOMAIN__ {
 	# bootstrap and the theme bootstrap script are inline; tightening to a
 	# nonce-based CSP is tracked separately. connect-src allows any https
 	# endpoint so beacons (web-monitor) and same-origin /api keep working.
+	# frame-src allows https because hosts embed externally hosted documents
+	# (project document tabs render them in a sandboxed opaque-origin iframe);
+	# without it frame-src falls back to default-src 'self' and those frames
+	# are blocked. http frames stay blocked as mixed content.
 	header {
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		X-Frame-Options "DENY"
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
-		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https: wss:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https: wss:; frame-src https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
 		-Server
 	}
 
