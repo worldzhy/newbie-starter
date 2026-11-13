@@ -43,8 +43,12 @@ extract_deploy_assets "$BACKEND_IMAGE" "$INSTALL_DIR"
 if [ "$#" -eq 0 ]; then
   $COMPOSE pull
   $COMPOSE up -d
-  # Gate on what actually came up (profiled services stay out of the list).
-  mapfile -t deployed < <($COMPOSE ps --services)
+  # Enumerate with -a: a service that was created and then died is exactly what
+  # the gate must catch, and plain `ps --services` omits exited containers
+  # (R37-01). This stack declares no profiles, so the list is the full set
+  # `up -d` just managed.
+  mapfile -t deployed < <($COMPOSE ps -a --services)
+  [ "${#deployed[@]}" -gt 0 ] || ready_fail "no services found after up -d; nothing to verify"
   wait_for_services_ready "${deployed[@]}"
 else
   $COMPOSE pull "$@"

@@ -168,12 +168,16 @@ newest_container() {
   echo "$best"
 }
 
-# ready_fail MESSAGE — fail the readiness gate with diagnostics. Plain `die`
-# would exit without the ERR trap firing, so the one-shot logs that explain the
-# failure would be lost.
+# ready_fail MESSAGE [EXIT_CODE] — fail the readiness gate with diagnostics.
+# Plain `die` would exit without the ERR trap firing, so the one-shot logs that
+# explain the failure would be lost. The exit code defaults to 1; callers pass
+# the container's real code so CI can tell "migration failed" (1) apart from
+# OOM-killed (137) or SIGTERM (143) (R37-02). BASH_LINENO[0] keeps the reported
+# line pointing at the caller, not at this function.
 ready_fail() {
-  echo "[$(date '+%Y-%m-%dT%H:%M:%S%z')] ERROR: $*" >&2
-  report_deploy_failure 1 "$LINENO"
+  local code="${2:-1}"
+  echo "[$(date '+%Y-%m-%dT%H:%M:%S%z')] ERROR: $1" >&2
+  report_deploy_failure "$code" "${BASH_LINENO[0]:-?}"
 }
 
 # wait_for_services_ready SERVICE... — block until every service is ready:
@@ -196,7 +200,7 @@ wait_for_services_ready() {
       read -r state health code <<<"$(container_probe "$cid")"
       if is_one_shot "$svc"; then
         case "$state" in
-          exited) [ "${code:-1}" -eq 0 ] || ready_fail "one-shot service $svc exited ${code}" ;;
+          exited) [ "${code:-1}" -eq 0 ] || ready_fail "one-shot service $svc exited ${code}" "${code:-1}" ;;
           running | created) pending="$pending $svc($state)" ;;
           *) ready_fail "one-shot service $svc is $state (exit $code)" ;;
         esac
