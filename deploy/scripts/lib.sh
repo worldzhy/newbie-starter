@@ -14,7 +14,18 @@
 DEPLOY_CONFIG_SCHEMA='{"region": "<aws-region>", "imageTag": "<image tag, e.g. prod>", "ecrRepositoryPrefix": "<account>.dkr.ecr.<region>.amazonaws.com", "appName": "<app name, e.g. myapp>"}'
 ENV_CONFIG_SCHEMA='{"region": "<aws-region>", "secretId": "<stack>/<env>/env", "siteDomain": "<public domain>", "acmeEmail": "<letsencrypt contact>"}'
 
-die() { echo "[$(date '+%Y-%m-%dT%H:%M:%S%z')] ERROR: $*" >&2; exit 1; }
+# die MESSAGE — fail fast with one line of context. Before install_failure_trap
+# runs (the host config checks) that line is all there is; afterwards it also
+# routes through report_deploy_failure, because an explicit `exit` never fires
+# the ERR trap and framework-integrity failures would otherwise stay bare
+# (R37-03). BASH_LINENO[0] keeps the reported line at die's caller.
+die() {
+  echo "[$(date '+%Y-%m-%dT%H:%M:%S%z')] ERROR: $*" >&2
+  if [ "${DEPLOY_FAILURE_TRAP:-0}" -eq 1 ]; then
+    report_deploy_failure 1 "${BASH_LINENO[0]:-?}"
+  fi
+  exit 1
+}
 
 # require_config FILE SCHEMA KEY... — die unless the file exists and every
 # listed key resolves to a non-empty value.
@@ -128,6 +139,161 @@ extract_deploy_assets() {
   rm -rf "${install_dir}/.deploy-new"
   docker rm -f "$cid" >/dev/null
   trap - EXIT
+}
+
+# --- Deployment readiness and failure diagnostics (ADR-047) ---
+#
+# `docker compose up -d` returning 0 only proves the containers were created;
+# it says nothing about whether they came up. These helpers turn the exit code
+# into an actual readiness judgement and make a failure explain itself instead
+# of leaving a bare exit status behind.
+
+# container_probe CONTAINER_ID — echo "<state> <health|none> <exit code>".
+container_probe() {
+  docker inspect --format '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}} {{.State.ExitCode}}' \
+    "$1" 2>/dev/null || echo "missing none 0"
+}
+
+# is_one_shot SERVICE — the same `*-migrate` / db-seed convention deploy.sh
+# uses to discover migrators; such a container is expected to exit, not run.
+is_one_shot() {
+  case "$1" in
+    *-migrate | db-seed) return 0 ;;
+  esac
+  return 1
+}
+
+# newest_container SERVICE — echo the id of the most recently created
+# container for a service, exited ones included (a one-shot that already
+# finished is exactly what the readiness gate needs to inspect).
+newest_container() {
+  local svc="$1" id ts best="" best_ts=""
+  for id in $($COMPOSE ps -aq "$svc" 2>/dev/null); do
+    ts="$(docker inspect --format '{{.Created}}' "$id" 2>/dev/null || true)"
+    [ -n "$ts" ] || continue
+    if [ -z "$best_ts" ] || [[ "$ts" > "$best_ts" ]]; then
+      best="$id"
+      best_ts="$ts"
+    fi
+  done
+  echo "$best"
+}
+
+# ready_fail MESSAGE [EXIT_CODE] — fail the readiness gate with diagnostics.
+# Plain `die` would exit without the ERR trap firing, so the one-shot logs that
+# explain the failure would be lost. The exit code defaults to 1; callers pass
+# the container's real code so CI can tell "migration failed" (1) apart from
+# OOM-killed (137) or SIGTERM (143) (R37-02). BASH_LINENO[0] keeps the reported
+# line pointing at the caller, not at this function.
+ready_fail() {
+  local code="${2:-1}"
+  echo "[$(date '+%Y-%m-%dT%H:%M:%S%z')] ERROR: $1" >&2
+  report_deploy_failure "$code" "${BASH_LINENO[0]:-?}"
+}
+
+# wait_for_services_ready SERVICE... — block until every service is ready:
+# healthcheck → healthy, long-running → running, one-shot → exited(0).
+# Polls every 5s up to DEPLOY_HEALTH_TIMEOUT (default 180s, which covers the
+# framework healthcheck's start_period 40s + interval 30s x retries 3).
+# unhealthy / dead / non-zero one-shot exits fail immediately.
+wait_for_services_ready() {
+  local timeout="${DEPLOY_HEALTH_TIMEOUT:-180}"
+  local deadline=$((SECONDS + timeout))
+  local pending svc cid state health code
+  while :; do
+    pending=""
+    for svc in "$@"; do
+      cid="$(newest_container "$svc")"
+      if [ -z "$cid" ]; then
+        pending="$pending $svc(no-container)"
+        continue
+      fi
+      read -r state health code <<<"$(container_probe "$cid")"
+      if is_one_shot "$svc"; then
+        case "$state" in
+          exited) [ "${code:-1}" -eq 0 ] || ready_fail "one-shot service $svc exited ${code}" "${code:-1}" ;;
+          running | created) pending="$pending $svc($state)" ;;
+          *) ready_fail "one-shot service $svc is $state (exit $code)" ;;
+        esac
+      else
+        case "$state" in
+          running)
+            case "$health" in
+              healthy | none) ;;
+              starting) pending="$pending $svc(starting)" ;;
+              *) ready_fail "service $svc is $health" ;;
+            esac
+            ;;
+          created | restarting | paused) pending="$pending $svc($state)" ;;
+          *) ready_fail "service $svc is $state (exit $code)" ;;
+        esac
+      fi
+    done
+    if [ -z "$pending" ]; then
+      echo "readiness gate passed: $*"
+      return 0
+    fi
+    if [ "$SECONDS" -ge "$deadline" ]; then
+      ready_fail "readiness gate timed out after ${timeout}s:$pending"
+    fi
+    echo "waiting for readiness:$pending"
+    sleep 5
+  done
+}
+
+# report_deploy_failure CODE LINE — print the failing context plus the tail of
+# every one-shot container's log, then exit with the original code. Output is
+# bounded (40 + 80 lines per service) because SSM truncates plugin output at
+# roughly 24k, and an unbounded dump would cut the root cause off again.
+report_deploy_failure() {
+  local code="${1:-1}" line="${2:-?}" svc cid state health exit_code shown=0
+  trap - ERR
+  {
+    echo
+    echo "=== deploy failed: exit $code (${BASH_SOURCE[1]:-deploy.sh}:$line) ==="
+  } >&2
+  if [ -n "${COMPOSE:-}" ]; then
+    {
+      echo "--- compose ps -a ---"
+      $COMPOSE ps -a 2>&1 | tail -n 40 || true
+    } >&2
+    for svc in $($COMPOSE config --services 2>/dev/null || true); do
+      cid="$(newest_container "$svc")"
+      [ -n "$cid" ] || continue
+      read -r state health exit_code <<<"$(container_probe "$cid")"
+      if is_one_shot "$svc"; then
+        # Migration/seed one-shots only matter when they failed.
+        [ "$state" = "exited" ] && [ "${exit_code:-0}" -ne 0 ] || continue
+      else
+        # Long-running services only matter when they are not serving.
+        [ "$state" = "running" ] && [ "$health" != "unhealthy" ] && continue
+      fi
+      [ "$shown" -lt 5 ] || break
+      shown=$((shown + 1))
+      {
+        echo "--- logs: $svc ($state/${health}, exit $exit_code) ---"
+        docker logs --tail 80 "$cid" 2>&1 || true
+      } >&2
+    done
+    {
+      echo "--- recovery ---"
+      echo "  1. docker compose logs <service>   # confirm the failing statement"
+      echo "  2. select * from _prisma_migrations where finished_at is null and rolled_back_at is null;"
+      echo "  3. fix the data/guard cause, then mark the failed row rolled back:"
+      echo "     docker compose run --rm --no-deps -T postgres-migrate npx prisma migrate resolve --rolled-back <migration_name>"
+      echo "  4. rerun: ${INSTALL_DIR:-<install dir>}/scripts/deploy.sh <services>"
+      echo "do not drop or rewrite data to get past a guard; it is protecting existing rows."
+    } >&2
+  fi
+  exit "$code"
+}
+
+# install_failure_trap — route any non-zero exit through report_deploy_failure.
+# Call once, after COMPOSE / INSTALL_DIR are set. Requires `set -E` so the trap
+# also fires inside functions.
+install_failure_trap() {
+  DEPLOY_FAILURE_TRAP=1
+  trap 'report_deploy_failure "$?" "$LINENO"' ERR
 }
 
 # resolve_region CONFIG_FILE — echo the AWS region. Precedence: the config

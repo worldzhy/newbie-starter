@@ -6,7 +6,11 @@
 #   deploy.sh                 # pull + recreate the whole stack (runs migrations)
 #   deploy.sh backend         # new backend image; postgres-migrate + module migrators run automatically
 #   deploy.sh frontend        # deploy a new frontend image
-set -euo pipefail
+#
+# The exit code is a readiness judgement, not just compose's (ADR-047): every
+# recreated service must be healthy/running (one-shots must exit 0), and any
+# failure prints its own diagnostics instead of a bare exit status.
+set -eEuo pipefail
 
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
@@ -18,6 +22,7 @@ IMAGE_TAG="$(json_val "$DEPLOY_CONFIG" imageTag)"
 REGISTRY="$(json_val "$DEPLOY_CONFIG" ecrRepositoryPrefix)"
 APP_NAME="$(json_val "$DEPLOY_CONFIG" appName)"
 COMPOSE="docker compose -f ${INSTALL_DIR}/compose.framework.yml -f ${INSTALL_DIR}/compose.modules.yml -f ${INSTALL_DIR}/compose.application.yml"
+install_failure_trap
 
 cd "$INSTALL_DIR"
 
@@ -38,6 +43,13 @@ extract_deploy_assets "$BACKEND_IMAGE" "$INSTALL_DIR"
 if [ "$#" -eq 0 ]; then
   $COMPOSE pull
   $COMPOSE up -d
+  # Enumerate with -a: a service that was created and then died is exactly what
+  # the gate must catch, and plain `ps --services` omits exited containers
+  # (R37-01). This stack declares no profiles, so the list is the full set
+  # `up -d` just managed.
+  mapfile -t deployed < <($COMPOSE ps -a --services)
+  [ "${#deployed[@]}" -gt 0 ] || ready_fail "no services found after up -d; nothing to verify"
+  wait_for_services_ready "${deployed[@]}"
 else
   $COMPOSE pull "$@"
 
@@ -65,6 +77,7 @@ else
   fi
 
   $COMPOSE up -d "${services[@]}"
+  wait_for_services_ready "${services[@]}"
 fi
 
 docker image prune -f >/dev/null
