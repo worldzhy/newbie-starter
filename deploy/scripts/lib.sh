@@ -14,7 +14,18 @@
 DEPLOY_CONFIG_SCHEMA='{"region": "<aws-region>", "imageTag": "<image tag, e.g. prod>", "ecrRepositoryPrefix": "<account>.dkr.ecr.<region>.amazonaws.com", "appName": "<app name, e.g. myapp>"}'
 ENV_CONFIG_SCHEMA='{"region": "<aws-region>", "secretId": "<stack>/<env>/env", "siteDomain": "<public domain>", "acmeEmail": "<letsencrypt contact>"}'
 
-die() { echo "[$(date '+%Y-%m-%dT%H:%M:%S%z')] ERROR: $*" >&2; exit 1; }
+# die MESSAGE — fail fast with one line of context. Before install_failure_trap
+# runs (the host config checks) that line is all there is; afterwards it also
+# routes through report_deploy_failure, because an explicit `exit` never fires
+# the ERR trap and framework-integrity failures would otherwise stay bare
+# (R37-03). BASH_LINENO[0] keeps the reported line at die's caller.
+die() {
+  echo "[$(date '+%Y-%m-%dT%H:%M:%S%z')] ERROR: $*" >&2
+  if [ "${DEPLOY_FAILURE_TRAP:-0}" -eq 1 ]; then
+    report_deploy_failure 1 "${BASH_LINENO[0]:-?}"
+  fi
+  exit 1
+}
 
 # require_config FILE SCHEMA KEY... — die unless the file exists and every
 # listed key resolves to a non-empty value.
@@ -281,6 +292,7 @@ report_deploy_failure() {
 # Call once, after COMPOSE / INSTALL_DIR are set. Requires `set -E` so the trap
 # also fires inside functions.
 install_failure_trap() {
+  DEPLOY_FAILURE_TRAP=1
   trap 'report_deploy_failure "$?" "$LINENO"' ERR
 }
 
