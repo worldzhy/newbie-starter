@@ -43,7 +43,7 @@
   },
   "devDependencies": {
     "@devbie/newbie-cli": "^1.20.0",
-    "@devbie/style-guide": "^1.5.0",
+    "@devbie/style-guide": "^1.8.0",
     "@nestjs/cli": "^12.0.11",
     "@nestjs/schematics": "^12.0.12",
     "@types/cookie-parser": "^1.4.7",
@@ -60,5 +60,16 @@
     "tsconfig-paths": "^4.2.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3"
+  },
+  "overrides": {
+    "@darraghor/eslint-plugin-nestjs-typed": {
+      "glob": "14.0.2"
+    },
+    "@nestjs/cli": {
+      "minimatch": "^11.0.1"
+    },
+    "@typescript-eslint/typescript-estree": {
+      "minimatch": "^11.0.5"
+    }
   }
 }
