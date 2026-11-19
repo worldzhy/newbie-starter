@@ -24,6 +24,19 @@ APP_NAME="$(json_val "$DEPLOY_CONFIG" appName)"
 COMPOSE="docker compose -f ${INSTALL_DIR}/compose.framework.yml -f ${INSTALL_DIR}/compose.modules.yml -f ${INSTALL_DIR}/compose.application.yml"
 install_failure_trap
 
+# Serialize deploys against this install directory. Backend and frontend
+# releases are independent commands that share one host, and each run pulls
+# images, extracts deploy assets and re-renders .env/Caddyfile in place; two
+# concurrent runs can interleave those writes. The lock is per install dir and
+# the kernel releases it when the script exits, so a crashed run leaves no
+# stale lock behind.
+if command -v flock >/dev/null 2>&1; then
+  exec 9>"${INSTALL_DIR}/.deploy-lock"
+  flock -w 900 9 || die "another deploy has held ${INSTALL_DIR}/.deploy-lock for 900s; refusing to run concurrently"
+else
+  echo "WARNING: flock not available; concurrent deploys are not serialized" >&2
+fi
+
 cd "$INSTALL_DIR"
 
 aws ecr get-login-password --region "$REGION" \
