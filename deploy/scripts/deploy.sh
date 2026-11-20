@@ -18,7 +18,12 @@ INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEPLOY_CONFIG="$INSTALL_DIR/deploy.config.json"
 require_config "$DEPLOY_CONFIG" "$DEPLOY_CONFIG_SCHEMA" region imageTag ecrRepositoryPrefix appName
 REGION="$(resolve_region "$DEPLOY_CONFIG")"
-IMAGE_TAG="$(json_val "$DEPLOY_CONFIG" imageTag)"
+# An inherited IMAGE_TAG pins an exact image tag; prod leaves it unset and the
+# configured tag applies. Export the resolved tag so the child render-env.sh
+# renders the same tag into .env, otherwise compose would pull a different image
+# than BACKEND_IMAGE below.
+IMAGE_TAG="${IMAGE_TAG:-$(json_val "$DEPLOY_CONFIG" imageTag)}"
+export IMAGE_TAG
 REGISTRY="$(json_val "$DEPLOY_CONFIG" ecrRepositoryPrefix)"
 APP_NAME="$(json_val "$DEPLOY_CONFIG" appName)"
 COMPOSE="docker compose -f ${INSTALL_DIR}/compose.framework.yml -f ${INSTALL_DIR}/compose.modules.yml -f ${INSTALL_DIR}/compose.application.yml"

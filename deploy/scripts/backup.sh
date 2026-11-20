@@ -27,6 +27,11 @@ source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COMPOSE="docker compose -f ${INSTALL_DIR}/compose.framework.yml -f ${INSTALL_DIR}/compose.modules.yml -f ${INSTALL_DIR}/compose.application.yml"
 REGION="$(resolve_region "$INSTALL_DIR/deploy.config.json")"
+# Environment suffix for the BackupFailure metric dimension. Derived from the
+# env secret id (<app>/<env>/env) so a staging failure never trips the
+# production alarm; falls back to prod when the secret id is absent.
+ENV_NAME="$(jq -r '.secretId // ""' "${INSTALL_DIR}/env.config.json" 2>/dev/null | awk -F/ '{print $2}' || true)"
+ENV_NAME="${ENV_NAME:-prod}"
 cd "$INSTALL_DIR"
 
 env_value() {
@@ -88,7 +93,7 @@ signal_failure() {
   # cron log still carries the alarm signal when AWS is rate-limiting.
   if ! aws --region "$REGION" cloudwatch put-metric-data \
     --namespace "$APP_NAME" \
-    --metric-data "MetricName=BackupFailure,Value=1,Unit=Count,Timestamp=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"; then
+    --metric-data "MetricName=BackupFailure,Value=1,Unit=Count,Dimensions=[{Name=Environment,Value=${ENV_NAME}}],Timestamp=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"; then
     echo "[$(date -Is)] WARNING: BackupFailure metric emit failed" >&2
   fi
   echo "[$(date -Is)] BACKUP FAILED (engine: ${failed_engine})" >&2
@@ -230,6 +235,6 @@ write_manifest success
 
 aws --region "$REGION" cloudwatch put-metric-data \
   --namespace "$APP_NAME" \
-  --metric-data "MetricName=BackupFailure,Value=0,Unit=Count,Timestamp=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+  --metric-data "MetricName=BackupFailure,Value=0,Unit=Count,Dimensions=[{Name=Environment,Value=${ENV_NAME}}],Timestamp=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
 trap - ERR
 echo "[$(date -Is)] backup completed (run ${RUN_ID}): ${COMPLETED_ENGINES} -> s3://${BUCKET}"

@@ -35,6 +35,13 @@ log() { echo "[provision $(date -Is)] $*"; }
 dnf install -y dnf-utils device-mapper-persistent-data lvm2 jq awscli-2 cronie
 systemctl enable --now crond
 
+# Environment suffix for the CloudWatch log group. Derived from the env secret
+# id (<app>/<env>/env) rather than a new UserData variable: any UserData change
+# replaces the EC2 instance, so the environment must not come from there. Read
+# after jq is installed, and tolerate a missing config file on first boot.
+ENV_NAME="$(jq -r '.secretId // ""' "${INSTALL_DIR}/env.config.json" 2>/dev/null | awk -F/ '{print $2}' || true)"
+ENV_NAME="${ENV_NAME:-prod}"
+
 # --- Docker -------------------------------------------------------------------
 if ! command -v docker >/dev/null 2>&1; then
   dnf config-manager --add-repo \
@@ -99,7 +106,7 @@ cat > /opt/aws/amazon-cloudwatch-agent/etc/${APP_NAME}-cw-config.json <<'JSON'
         "collect_list": [
           {
             "file_path": "/var/log/__APP_NAME__-backup.log",
-            "log_group_name": "__APP_NAME__-prod",
+            "log_group_name": "__APP_NAME__-__ENV__",
             "log_stream_name": "backup"
           }
         ]
@@ -108,7 +115,7 @@ cat > /opt/aws/amazon-cloudwatch-agent/etc/${APP_NAME}-cw-config.json <<'JSON'
   }
 }
 JSON
-sed -i "s|__APP_NAME__|${APP_NAME}|g" \
+sed -i -e "s|__APP_NAME__|${APP_NAME}|g" -e "s|__ENV__|${ENV_NAME}|g" \
   /opt/aws/amazon-cloudwatch-agent/etc/${APP_NAME}-cw-config.json
 /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
   -a fetch-config -m ec2 -s \
