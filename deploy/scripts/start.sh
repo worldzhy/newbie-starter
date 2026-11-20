@@ -15,7 +15,10 @@ INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEPLOY_CONFIG="$INSTALL_DIR/deploy.config.json"
 require_config "$DEPLOY_CONFIG" "$DEPLOY_CONFIG_SCHEMA" region imageTag ecrRepositoryPrefix appName
 REGION="$(resolve_region "$DEPLOY_CONFIG")"
-IMAGE_TAG="$(json_val "$DEPLOY_CONFIG" imageTag)"
+# An inherited IMAGE_TAG pins an exact image tag; export it so render-env.sh
+# renders the same tag into .env as the images pulled below.
+IMAGE_TAG="${IMAGE_TAG:-$(json_val "$DEPLOY_CONFIG" imageTag)}"
+export IMAGE_TAG
 REGISTRY="$(json_val "$DEPLOY_CONFIG" ecrRepositoryPrefix)"
 APP_NAME="$(json_val "$DEPLOY_CONFIG" appName)"
 COMPOSE="docker compose -f ${INSTALL_DIR}/compose.framework.yml -f ${INSTALL_DIR}/compose.modules.yml -f ${INSTALL_DIR}/compose.application.yml"

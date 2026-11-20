@@ -22,7 +22,9 @@ require_config "$DEPLOY_CONFIG" "$DEPLOY_CONFIG_SCHEMA" region imageTag ecrRepos
 SECRET_ID="$(json_val "$ENV_CONFIG" secretId)"
 SITE_DOMAIN="$(json_val "$ENV_CONFIG" siteDomain)"
 ACME_EMAIL="$(json_val "$ENV_CONFIG" acmeEmail)"
-IMAGE_TAG="$(json_val "$DEPLOY_CONFIG" imageTag)"
+# An inherited IMAGE_TAG pins an exact image tag; deploy.sh and start.sh export
+# the tag they pulled so .env and the compose images stay on the same release.
+IMAGE_TAG="${IMAGE_TAG:-$(json_val "$DEPLOY_CONFIG" imageTag)}"
 ECR_PREFIX="$(json_val "$DEPLOY_CONFIG" ecrRepositoryPrefix)"
 APP_NAME="$(json_val "$DEPLOY_CONFIG" appName)"
 REGION="$(resolve_region "$DEPLOY_CONFIG")"
