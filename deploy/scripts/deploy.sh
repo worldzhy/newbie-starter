@@ -24,6 +24,19 @@ APP_NAME="$(json_val "$DEPLOY_CONFIG" appName)"
 COMPOSE="docker compose -f ${INSTALL_DIR}/compose.framework.yml -f ${INSTALL_DIR}/compose.modules.yml -f ${INSTALL_DIR}/compose.application.yml"
 install_failure_trap
 
+# Serialize deploys against this install directory. Backend and frontend
+# releases are independent commands that share one host, and each run pulls
+# images, extracts deploy assets and re-renders .env/Caddyfile in place; two
+# concurrent runs can interleave those writes. The lock is per install dir and
+# the kernel releases it when the script exits, so a crashed run leaves no
+# stale lock behind.
+if command -v flock >/dev/null 2>&1; then
+  exec 9>"${INSTALL_DIR}/.deploy-lock"
+  flock -w 900 9 || die "another deploy has held ${INSTALL_DIR}/.deploy-lock for 900s; refusing to run concurrently"
+else
+  echo "WARNING: flock not available; concurrent deploys are not serialized" >&2
+fi
+
 cd "$INSTALL_DIR"
 
 aws ecr get-login-password --region "$REGION" \
@@ -38,7 +51,25 @@ $COMPOSE pull backend >/dev/null
 extract_deploy_assets "$BACKEND_IMAGE" "$INSTALL_DIR"
 
 # Re-render in case the new image changed the Caddy template.
+#
+# compose `up -d` does not recreate caddy when only the bind-mounted Caddyfile
+# changed, so a new domain or proxy rule would silently keep serving the old
+# config until someone restarted the container by hand (R53-12). Reload it in
+# place instead — and only when the rendered file actually changed.
+caddyfile_hash() {
+  sha256sum "${INSTALL_DIR}/Caddyfile" 2>/dev/null | cut -d' ' -f1 || true
+}
+CADDYFILE_BEFORE="$(caddyfile_hash)"
 "${INSTALL_DIR}/scripts/render-env.sh"
+if [ "$(caddyfile_hash)" != "$CADDYFILE_BEFORE" ] \
+  && $COMPOSE ps --services --status running 2>/dev/null | grep -qx "caddy"; then
+  if $COMPOSE exec -T caddy caddy validate --adapter caddyfile --config /etc/caddy/Caddyfile >/dev/null; then
+    $COMPOSE exec -T caddy caddy reload --adapter caddyfile --config /etc/caddy/Caddyfile >/dev/null
+    echo "caddy reloaded with the re-rendered Caddyfile"
+  else
+    die "rendered Caddyfile failed validation; refusing to reload caddy (previous config keeps serving)"
+  fi
+fi
 
 if [ "$#" -eq 0 ]; then
   $COMPOSE pull
