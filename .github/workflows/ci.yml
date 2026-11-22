@@ -43,15 +43,18 @@ jobs:
       - name: Template ownership registry
         run: npm run check:template
 
-      - name: Lint
-        run: npm run lint
-
       # prisma.config eagerly resolves PRISMA_DATABASE_URL even for generate;
       # use a non-connecting placeholder — generate never opens a connection.
+      # Generate runs before Lint because type-aware rules resolve the Prisma
+      # client: without it the DTO rules report every enum-typed property as
+      # optional.
       - name: Prisma generate
         run: npx prisma generate
         env:
           PRISMA_DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+
+      - name: Lint
+        run: npm run lint
 
       # The template ships with a smoke test (R20-26): every generated project
       # starts from this skeleton, so the baseline test must gate CI. Runs
