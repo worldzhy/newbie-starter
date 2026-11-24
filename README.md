@@ -56,7 +56,7 @@ Business code — `src/application/`, `src/modules/`, your Prisma models outside
 
 `NewbieFactory` starts the built-in reporters automatically after the HTTP server is accepting traffic. Every reporter is a silent no-op unless its two variables are set, so no code wiring is required:
 
-- module-hub self-registration: `MODULE_HUB_BASE_URL` (hub base URL; the reporter appends `/module-hub/reports`) + `MODULE_HUB_TOKEN`
+- module-hub self-registration: `MODULE_HUB_ENDPOINT` (complete report URL, posted verbatim) + `MODULE_HUB_TOKEN`
 - dependency health snapshots: `HEALTH_ENDPOINT` + `HEALTH_TOKEN`
 - backend request monitoring: `BACKEND_MONITOR_ENDPOINT` + `BACKEND_MONITOR_TOKEN`
 
