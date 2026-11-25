@@ -56,21 +56,23 @@ Business code — `src/application/`, `src/modules/`, your Prisma models outside
 
 `NewbieFactory` starts the built-in reporters automatically after the HTTP server is accepting traffic. Every reporter is a silent no-op unless its two variables are set, so no code wiring is required:
 
-- module-hub self-registration: `MODULE_HUB_ENDPOINT` + `MODULE_HUB_TOKEN`
+- module-hub self-registration: `MODULE_HUB_ENDPOINT` (complete report URL, posted verbatim) + `MODULE_HUB_TOKEN`
 - dependency health snapshots: `HEALTH_ENDPOINT` + `HEALTH_TOKEN`
 - backend request monitoring: `BACKEND_MONITOR_ENDPOINT` + `BACKEND_MONITOR_TOKEN`
 
 Commented placeholders for all of them live in `.env.example`.
 
-## Pinning to a template revision
+## Template revisions
 
-`create` and `template update` scaffold from the repository tip by default. The skeleton evolves in the same repository as `@devbie/newbie`, so the tip skeleton always matches the current framework line; there is no separate template version sequence.
+`create` and `template update` scaffold from the repository tip by default, which is the `main` branch: the released skeleton. The skeleton evolves in the same repository as `@devbie/newbie`, so the tip skeleton always matches the current framework line; there is no separate template version sequence.
+
+A drift gate in a consuming project must compare against that released skeleton, so `newbie template update --check` runs without a ref. Unreleased template commits live on `dev`; when you need to verify that a host can adopt them before release, run a one-off `--template-ref dev` check locally. Do not put that ref into a permanent workflow: an unreleased template commit would then decide whether the host repository is green.
 
 To scaffold from a specific git branch or tag, pass `--template-ref` (any ref accepted by `git clone --branch`):
 
 ```bash
-npx @devbie/newbie-cli create my-service --template-ref dev
-npx newbie template update --template-ref dev
+npx @devbie/newbie-cli create my-service --template-ref dev   # pre-release trial only
+npx newbie template update --template-ref dev                # pre-release trial only
 ```
 
 For a fully reproducible historical checkout, also pin the `@devbie/newbie` and `@devbie/newbie-cli` versions in `package.json` to the framework release contemporary with that ref.
