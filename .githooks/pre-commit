@@ -2,8 +2,12 @@
 # Lints (fixable only) and formats staged files inside a throwaway Node
 # container, then restages them. Each step runs this repo's own eslint flat
 # config (from eslint.config.*) and prettier config (from package.json
-# "prettier"). Fails closed: unfixable lint errors or formatter failures block
-# the commit instead of letting debt into history.
+# "prettier"). Finally, when a module-owned path is staged, it runs the
+# local-only module source drift check (ADR-078). Fails closed: unfixable lint
+# errors, formatter failures, or detected drift block the commit instead of
+# letting debt into history. The drift check degrades to a warning (never
+# blocks) when the CLI or registry is unavailable; CI's `modules apply --check`
+# is the authoritative full gate.
 set -e
 
 repo_root=$(git rev-parse --show-toplevel)
@@ -33,6 +37,20 @@ trap 'rm -f "$list_file" "$all_list" "$lint_list"' EXIT
 
 git diff --cached --name-only --diff-filter=ACMR -z > "$list_file"
 
+# --- Module drift trigger (ADR-078) -------------------------------------
+# Run the local-only gate only when a module-owned path is staged, so unrelated
+# commits pay nothing. Scanned from the full staged list (not just lint/format
+# files) so a binary or non-format change under src/modules is still caught.
+drift_trigger=
+while IFS= read -r -d '' path; do
+  case "$path" in
+    src/modules/*|newbie-modules.json|newbie-modules.lock.json)
+      drift_trigger=1
+      break
+      ;;
+  esac
+done < "$list_file"
+
 set --
 while IFS= read -r -d '' path; do
   case "$path" in
@@ -54,7 +72,7 @@ while IFS= read -r -d '' path; do
   esac
 done < "$list_file"
 
-if [ ! -s "$all_list" ]; then
+if [ ! -s "$all_list" ] && [ -z "$drift_trigger" ]; then
   exit 0
 fi
 
@@ -91,8 +109,11 @@ if [ -s "$lint_list" ]; then
 fi
 
 # --- Format (repo prettier config) ---------------------------------------
-# Same docker-or-local selection as the lint step above.
+# Same docker-or-local selection as the lint step above. Skipped when no
+# format/lint-relevant files are staged; a module-drift-only commit still
+# reaches the drift gate below.
 
+if [ -s "$all_list" ]; then
 if command -v docker >/dev/null 2>&1; then
   docker run --rm --network none \
     -v "$repo_root":/workspace -w /workspace \
@@ -117,4 +138,37 @@ fi || {
   exit 1
 }
 
-xargs -0 < "$all_list" git add --
+  xargs -0 < "$all_list" git add --
+fi
+
+# --- Module source drift (ADR-078) --------------------------------------
+# Local-only, offline check: installed copies under src/modules/<key> must
+# match their provenance lock. Runs only when a module-owned path is staged
+# (drift_trigger above). Exit code contract: 0 clean, 2 drift found, anything
+# else is a tooling/availability error. We block ONLY on 2; any other non-zero
+# exit warns and skips so the gate never blocks on a missing CLI or registry.
+# CI's `newbie modules apply --check` is the authoritative full gate (it also
+# proves lock-tampered, which needs a registry checkout + git).
+if [ -n "$drift_trigger" ]; then
+  if [ ! -x node_modules/.bin/newbie ]; then
+    echo "pre-commit: newbie CLI unavailable (run npm install); skipping module drift check (CI still enforces it)" >&2
+  else
+    set +e
+    if command -v docker >/dev/null 2>&1; then
+      docker run --rm --network none \
+        -v "$repo_root":/workspace -w /workspace \
+        node:24-alpine \
+        node node_modules/.bin/newbie modules drift
+    else
+      node node_modules/.bin/newbie modules drift
+    fi
+    drift_exit=$?
+    set -e
+    if [ "$drift_exit" -eq 2 ]; then
+      echo "pre-commit: module source drift detected; commit blocked (restore with 'newbie modules apply' or adopt with 'newbie modules update')" >&2
+      exit 1
+    elif [ "$drift_exit" -ne 0 ]; then
+      echo "pre-commit: 'newbie modules drift' could not run (exit $drift_exit); skipping module drift check (CI still enforces it)" >&2
+    fi
+  fi
+fi
